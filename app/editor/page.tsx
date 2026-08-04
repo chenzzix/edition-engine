@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { toPng } from 'html-to-image'
 
-// 高级感黄金排版常数（整合紧凑边距与完美分页）
+// 高级感黄金排版常数
 const ADVANCED_LINE_HEIGHT = 1.95
 const ADVANCED_PADDING_X = 64
 const ADVANCED_PADDING_Y = 56
@@ -34,14 +34,16 @@ export default function EditorPage() {
   
   const [edStudioName, setEdStudioName] = useState('EDITORIAL TYPOGRAPHY®') 
   const [edCoverSubtitle, setEdCoverSubtitle] = useState('STUDIO ARCHIVE / VOL.01') 
-  const [edTitle, setEdTitle] = useState('设计中的留白与呼吸感')
+  
+  // 5. 默认占位标题改成“设计中的留白与呼吸”
+  const [edTitle, setEdTitle] = useState('设计中的留白与呼吸')
   
   const [edLogo, setEdLogo] = useState<string>('')
   const [edDisplayMode, setEdDisplayMode] = useState<'text' | 'logo'>('text')
 
   const [edCoverImage, setEdCoverImage] = useState<string>('')
   const [edCoverWeight, setEdCoverWeight] = useState(60) 
-  const [coverMaskOpacity, setCoverMaskOpacity] = useState(0) // 封面专属黑色遮罩进度条
+  const [coverMaskOpacity, setCoverMaskOpacity] = useState(0)
 
   const [bodyImages, setBodyImages] = useState<{ url: string; checked: boolean }[]>([])
   const [isExporting, setIsExporting] = useState(false)
@@ -63,7 +65,7 @@ export default function EditorPage() {
 
   const activeImages = useMemo(() => bodyImages.filter(img => img.checked), [bodyImages])
 
-  // 计算字数（剥离掉排版标签如 [IMG], [H], [/H]）
+  // 计算字数
   const totalChars = useMemo(() => {
     return editorialText
       .replace(/\[IMG\]/g, '')
@@ -75,7 +77,7 @@ export default function EditorPage() {
     return Math.max(1, Math.ceil(totalChars / 350))
   }, [totalChars])
 
-  // 精准的分页引擎逻辑（完全免疫 [H] 标签）
+  // 高度智能化的分页引擎（按行精准切分，彻底消除大面积无用留白）
   const editorialPages = useMemo(() => {
     if (!mounted) return []
 
@@ -131,17 +133,44 @@ export default function EditorPage() {
         return
       }
 
-      // 剥离特殊标签以精确计算段落占用的行数
-      const cleanParaForMath = para.replace(/\[\/?H\]/g, '')
-      const paraLines = Math.max(1, Math.ceil(cleanParaForMath.length / charsPerLine))
+      let remainingText = para
+      while (remainingText.length > 0) {
+        const cleanForMath = remainingText.replace(/\[\/?H\]/g, '')
+        const neededLines = Math.max(1, Math.ceil(cleanForMath.length / charsPerLine))
+        const availableLines = maxLinesPerPage - currentLines
 
-      if (currentLines + paraLines > maxLinesPerPage && currentLines > 0) {
-        startNewPage()
-        currentChunk = para + '\n'
-        currentLines = paraLines + 0.5
-      } else {
-        currentChunk += para + '\n'
-        currentLines += paraLines + 0.5
+        if (neededLines <= availableLines || availableLines < 1.5) {
+          if (availableLines < 1.5 && neededLines > availableLines && currentLines > 0) {
+            startNewPage()
+          }
+          currentChunk += remainingText + '\n'
+          currentLines += Math.max(1, Math.ceil(remainingText.replace(/\[\/?H\]/g, '').length / charsPerLine)) + 0.5
+          remainingText = ''
+        } else {
+          // 当前页装不下整个段落时，按字符行数切分，填满当前页再分页
+          const maxCharsToFit = Math.floor(availableLines * charsPerLine)
+          
+          if (maxCharsToFit > 15 && currentLines > 0) {
+            let cutIdx = maxCharsToFit
+            
+            // 安全防切割：避免截断 [H] 标签
+            const sub = remainingText.slice(0, cutIdx)
+            const openTags = (sub.match(/\[H\]/g) || []).length
+            const closeTags = (sub.match(/\[\/H\]/g) || []).length
+            
+            if (openTags > closeTags) {
+              const lastOpen = sub.lastIndexOf('[H]')
+              if (lastOpen > 0) cutIdx = lastOpen
+            }
+
+            if (cutIdx > 10) {
+              const partToFit = remainingText.slice(0, cutIdx)
+              currentChunk += partToFit
+              remainingText = remainingText.slice(cutIdx)
+            }
+          }
+          startNewPage()
+        }
       }
     })
 
@@ -149,11 +178,9 @@ export default function EditorPage() {
     return pages
   }, [editorialText, edRatio, edSizeLabel, activeImages, mounted])
 
-  // 处理富文本渲染：解析 [H]...[/H] 标签并赋予反转色排版美学
+  // 处理富文本渲染：解析 [H]...[/H] 高亮小标题
   const renderTextWithHighlights = (content: string) => {
-    // 按标签拆分字符串
     const parts = content.split(/(\[H\].*?\[\/H\])/g)
-    
     return parts.map((part, i) => {
       if (part.startsWith('[H]') && part.endsWith('[/H]')) {
         const innerText = part.slice(3, -4)
@@ -180,7 +207,6 @@ export default function EditorPage() {
     const selection = window.getSelection()
     const text = selection?.toString().trim()
     
-    // 如果选中了文字，且不包含跨行（保证排版稳定）
     if (text && text.length > 0 && !text.includes('\n')) {
       const range = selection!.getRangeAt(0)
       const rect = range.getBoundingClientRect()
@@ -189,22 +215,20 @@ export default function EditorPage() {
         show: true,
         text,
         x: rect.left + rect.width / 2,
-        y: rect.top - 45 // 悬浮在文字上方
+        y: rect.top - 45
       })
     } else {
       setTooltip({ show: false, text: '', x: 0, y: 0 })
     }
   }
 
-  // 执行高亮格式替换
+  // 执行小标题替换
   const applyHeadingHighlight = () => {
     if (tooltip.text) {
-      // 避免重复包裹已经有标签的文本
       const safeText = tooltip.text.replace(/\[\/?H\]/g, '')
       setEditorialText((prev) => prev.replace(tooltip.text, `[H]${safeText}[/H]`))
-      
       setTooltip({ show: false, text: '', x: 0, y: 0 })
-      window.getSelection()?.removeAllRanges() // 清除浏览器原始选区
+      window.getSelection()?.removeAllRanges()
     }
   }
 
@@ -235,7 +259,6 @@ export default function EditorPage() {
     }
   }
 
-  // 修复黑底：使用 PNG 且显式传入当前背景色
   const exportAsImage = async (id: string, name: string) => {
     const el = document.getElementById(id)
     if (!el) return
@@ -275,7 +298,7 @@ export default function EditorPage() {
   return (
     <div className="flex h-screen w-full bg-[#121212] text-white font-sans overflow-hidden relative">
       
-      {/* 悬浮划词高亮按钮 */}
+      {/* 划词悬浮菜单 */}
       {tooltip.show && (
         <div
           className="fixed z-50 bg-white text-black text-[12px] font-black px-4 py-2 rounded-full shadow-2xl cursor-pointer transform -translate-x-1/2 flex items-center gap-2 hover:bg-gray-200 hover:scale-105 transition-all border border-black/10"
@@ -309,7 +332,7 @@ export default function EditorPage() {
         </div>
 
         <div className="space-y-5 pb-12">
-          {/* 1. 封面专属配置 */}
+          {/* 1. 封面配置 */}
           <div className="p-3 bg-[#252525] rounded-lg border border-[#333] space-y-3">
             <span className="text-[10px] uppercase tracking-widest text-gray-400 block font-bold">Cover Configuration / 封面配置</span>
             
@@ -323,7 +346,6 @@ export default function EditorPage() {
               <input type="file" accept="image/*" className="hidden" onChange={handleEdCoverUpload} />
             </label>
 
-            {/* 封面黑色遮罩进度条 */}
             <div className="space-y-1 pt-1 border-t border-[#333]">
               <div className="flex justify-between text-[10px] text-gray-400 font-bold">
                 <span>封面黑色遮罩透明度</span>
@@ -448,13 +470,13 @@ export default function EditorPage() {
         </div>
       </div>
 
-      {/* 右侧实时渲染与预览区（绑定了全局划词监听 onMouseUp） */}
+      {/* 右侧预览区 */}
       <div 
         className="flex-1 h-screen bg-[#121212] overflow-y-auto p-12 flex flex-col items-center gap-16 pb-32"
         onMouseUp={handleSelection}
       >
         
-        {/* 封面预览渲染 */}
+        {/* 封面预览 */}
         <div className="flex flex-col items-center gap-3 group">
           <div className="flex justify-between w-[360px] text-[10px] font-mono tracking-widest text-gray-400 uppercase">
             <span>PAGE 00 // COVER</span>
@@ -467,7 +489,6 @@ export default function EditorPage() {
                 {edCoverImage ? (
                   <>
                     <img src={edCoverImage} className="w-full h-full object-cover" alt="Cover" />
-                    {/* 封面专属黑色遮罩 */}
                     <div className="absolute inset-0 bg-black pointer-events-none transition-opacity" style={{ opacity: coverMaskOpacity / 100 }} />
                   </>
                 ) : (
@@ -475,17 +496,28 @@ export default function EditorPage() {
                 )}
               </div>
 
+              {/* 封面文字区：6. 优化副标题字体并对齐大标题 */}
               <div className="flex-1 p-16 flex flex-col justify-between">
-                <div>
-                  <div className="text-xs font-mono tracking-widest uppercase opacity-50 mb-3">{edCoverSubtitle}</div>
-                  <h1 className="text-[52px] font-extrabold leading-tight uppercase tracking-tight">{edTitle}</h1>
+                <div className="space-y-3">
+                  <div 
+                    className="text-[13px] font-semibold tracking-[0.25em] uppercase opacity-60 pl-0.5" 
+                    style={{ fontFamily: STRICT_SANS_SERIF }}
+                  >
+                    {edCoverSubtitle}
+                  </div>
+                  <h1 className="text-[52px] font-extrabold leading-[1.1] uppercase tracking-tight">
+                    {edTitle}
+                  </h1>
                 </div>
+
                 <div className="border-t pt-6 flex justify-between items-end border-current opacity-80" style={{ fontFamily: STRICT_SANS_SERIF }}>
                   <div className="flex items-center gap-3 text-lg font-bold">
                     {edLogo && <img src={edLogo} className="h-8 max-w-[120px] object-contain" alt="Logo" />}
                     <span>{edStudioName}</span>
                   </div>
-                  <div className="text-right text-xs opacity-75">
+                  
+                  {/* 4. 放大字数与阅读时间文字 */}
+                  <div className="text-right text-[15px] font-medium opacity-85 leading-relaxed">
                     本文约 {totalChars} 字，阅读约 {readingTime} 分钟
                   </div>
                 </div>
@@ -495,7 +527,7 @@ export default function EditorPage() {
           </div>
         </div>
 
-        {/* 正文各页预览渲染 */}
+        {/* 正文预览 */}
         {editorialPages.map((pageBlocks, pageIndex) => (
           <div key={pageIndex} className="flex flex-col items-center gap-3 group">
             <div className="flex justify-between w-[360px] text-[10px] font-mono tracking-widest text-gray-400 uppercase">
@@ -518,7 +550,7 @@ export default function EditorPage() {
                   <span className="text-xs font-bold font-mono">{String(pageIndex + 1).padStart(2, '0')}</span>
                 </div>
 
-                {/* 正文内容区（加入富文本渲染识别 [H] 标签） */}
+                {/* 正文内容区 */}
                 <div className="flex-1 py-6 overflow-hidden flex flex-col justify-start text-justify tracking-wide selection:bg-black/20" style={{ fontSize: `${FONT_SIZE_MAP[edSizeLabel]}px`, lineHeight: ADVANCED_LINE_HEIGHT }}>
                   <div className="space-y-4">
                     {pageBlocks.map((block, bIdx) => {
@@ -544,11 +576,9 @@ export default function EditorPage() {
                   </div>
                 </div>
 
-                {/* 页脚区 */}
+                {/* 3. 去掉正文页左下角 Logo，保持极简 */}
                 <div className="flex justify-between items-center tracking-widest opacity-40 uppercase pt-4 shrink-0 text-[10px] font-mono" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                  <div>
-                    {edDisplayMode === 'logo' && edLogo && <img src={edLogo} className="h-6 max-w-[100px] object-contain opacity-80" alt="Footer Logo" />}
-                  </div>
+                  <div></div>
                   <div>EDITION 2026</div>
                 </div>
 
