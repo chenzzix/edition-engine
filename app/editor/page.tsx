@@ -46,8 +46,11 @@ export default function EditorPage() {
   const [bodyImages, setBodyImages] = useState<{ url: string; checked: boolean }[]>([])
   const [isExporting, setIsExporting] = useState(false)
   
+  // 悬浮划词高亮工具条状态
+  const [tooltip, setTooltip] = useState({ show: false, text: '', x: 0, y: 0 })
+
   const [editorialText, setEditorialText] = useState<string>(
-    `留白不是空无一物，而是视觉的延伸与呼吸的节奏。在版面中，适当的留白能让核心视觉点更加聚焦。\n\n` +
+    `[H]留白不是空无一物，而是视觉的延伸与呼吸的节奏。[/H]在版面中，适当的留白能让核心视觉点更加聚焦。\n\n` +
     `核心驱动力：基于灵魂指示星和命主星，解读我此生灵魂渴望体验的主要课题是什么？进化的方向（南北交点轴线）：基于南北交点，指出我过于熟悉、容易陷入的“舒适区”（前世习气）在哪里？以及我此生必须努力拓展、甚至感到陌生的“进化区”在哪里？\n\n` +
     `[IMG]\n\n` +
     `识别“定业”与惯性：不要只告诉我“某星在某宫不好”，请将其翻译为心理模式。指出我生命中反复出现的、根深蒂固的思维或情绪惯性是什么？（例如：在关系中总是无意识地自我牺牲，或者在事业上总是因为完美主义而停滞）。\n\n` +
@@ -60,15 +63,19 @@ export default function EditorPage() {
 
   const activeImages = useMemo(() => bodyImages.filter(img => img.checked), [bodyImages])
 
+  // 计算字数（剥离掉排版标签如 [IMG], [H], [/H]）
   const totalChars = useMemo(() => {
-    return editorialText.replace(/\[IMG\]/g, '').replace(/\s/g, '').length
+    return editorialText
+      .replace(/\[IMG\]/g, '')
+      .replace(/\[\/?H\]/g, '')
+      .replace(/\s/g, '').length
   }, [editorialText])
 
   const readingTime = useMemo(() => {
     return Math.max(1, Math.ceil(totalChars / 350))
   }, [totalChars])
 
-  // 精准的分页引擎逻辑
+  // 精准的分页引擎逻辑（完全免疫 [H] 标签）
   const editorialPages = useMemo(() => {
     if (!mounted) return []
 
@@ -124,7 +131,9 @@ export default function EditorPage() {
         return
       }
 
-      const paraLines = Math.max(1, Math.ceil(para.length / charsPerLine))
+      // 剥离特殊标签以精确计算段落占用的行数
+      const cleanParaForMath = para.replace(/\[\/?H\]/g, '')
+      const paraLines = Math.max(1, Math.ceil(cleanParaForMath.length / charsPerLine))
 
       if (currentLines + paraLines > maxLinesPerPage && currentLines > 0) {
         startNewPage()
@@ -139,6 +148,65 @@ export default function EditorPage() {
     startNewPage()
     return pages
   }, [editorialText, edRatio, edSizeLabel, activeImages, mounted])
+
+  // 处理富文本渲染：解析 [H]...[/H] 标签并赋予反转色排版美学
+  const renderTextWithHighlights = (content: string) => {
+    // 按标签拆分字符串
+    const parts = content.split(/(\[H\].*?\[\/H\])/g)
+    
+    return parts.map((part, i) => {
+      if (part.startsWith('[H]') && part.endsWith('[/H]')) {
+        const innerText = part.slice(3, -4)
+        return (
+          <span 
+            key={i} 
+            className="font-black px-1.5 py-[2px] mx-[2px] rounded-sm transition-colors shadow-sm"
+            style={{ 
+              backgroundColor: edTextColor, 
+              color: edBgColor, 
+              letterSpacing: '0.05em' 
+            }}
+          >
+            {innerText}
+          </span>
+        )
+      }
+      return <span key={i}>{part}</span>
+    })
+  }
+
+  // 划词选取事件监听
+  const handleSelection = () => {
+    const selection = window.getSelection()
+    const text = selection?.toString().trim()
+    
+    // 如果选中了文字，且不包含跨行（保证排版稳定）
+    if (text && text.length > 0 && !text.includes('\n')) {
+      const range = selection!.getRangeAt(0)
+      const rect = range.getBoundingClientRect()
+      
+      setTooltip({
+        show: true,
+        text,
+        x: rect.left + rect.width / 2,
+        y: rect.top - 45 // 悬浮在文字上方
+      })
+    } else {
+      setTooltip({ show: false, text: '', x: 0, y: 0 })
+    }
+  }
+
+  // 执行高亮格式替换
+  const applyHeadingHighlight = () => {
+    if (tooltip.text) {
+      // 避免重复包裹已经有标签的文本
+      const safeText = tooltip.text.replace(/\[\/?H\]/g, '')
+      setEditorialText((prev) => prev.replace(tooltip.text, `[H]${safeText}[/H]`))
+      
+      setTooltip({ show: false, text: '', x: 0, y: 0 })
+      window.getSelection()?.removeAllRanges() // 清除浏览器原始选区
+    }
+  }
 
   const handleEdCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -160,14 +228,10 @@ export default function EditorPage() {
 
   const getFontFamilyStyle = (fontKey: string) => {
     switch (fontKey) {
-      case 'SongTi':
-        return '"SimSun", "STSong", "Songti SC", "Noto Serif SC", serif'
-      case 'HeiTi':
-        return '"PingFang SC", "Microsoft YaHei", "Heiti SC", sans-serif'
-      case 'KaiTi':
-        return '"Kaiti SC", "STKaiti", "KaiTi", serif'
-      default:
-        return 'serif'
+      case 'SongTi': return '"SimSun", "STSong", "Songti SC", "Noto Serif SC", serif'
+      case 'HeiTi': return '"PingFang SC", "Microsoft YaHei", "Heiti SC", sans-serif'
+      case 'KaiTi': return '"Kaiti SC", "STKaiti", "KaiTi", serif'
+      default: return 'serif'
     }
   }
 
@@ -209,10 +273,21 @@ export default function EditorPage() {
   if (!mounted) return null
 
   return (
-    <div className="flex h-screen w-full bg-[#121212] text-white font-sans overflow-hidden">
+    <div className="flex h-screen w-full bg-[#121212] text-white font-sans overflow-hidden relative">
       
+      {/* 悬浮划词高亮按钮 */}
+      {tooltip.show && (
+        <div
+          className="fixed z-50 bg-white text-black text-[12px] font-black px-4 py-2 rounded-full shadow-2xl cursor-pointer transform -translate-x-1/2 flex items-center gap-2 hover:bg-gray-200 hover:scale-105 transition-all border border-black/10"
+          style={{ left: tooltip.x, top: tooltip.y }}
+          onClick={applyHeadingHighlight}
+        >
+          ✨ 设为排版小标题
+        </div>
+      )}
+
       {isExporting && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center text-white">
           <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mb-6"></div>
           <h2 className="text-xl font-black tracking-widest uppercase mb-2">正在一键压制全册文件...</h2>
           <p className="text-xs font-mono opacity-50">Please do not close this window.</p>
@@ -363,15 +438,21 @@ export default function EditorPage() {
 
           {/* 7. 标题与正文输入 */}
           <div className="space-y-3">
-            <label className="text-[10px] uppercase tracking-widest text-gray-400 block font-medium">Content Editor / 文章内容</label>
+            <div className="flex justify-between items-end">
+              <label className="text-[10px] uppercase tracking-widest text-gray-400 block font-medium">Content Editor / 文章内容</label>
+              <span className="text-[10px] text-emerald-400 font-bold animate-pulse">💡 支持右侧划词自动高亮</span>
+            </div>
             <input type="text" value={edTitle} onChange={e => setEdTitle(e.target.value)} placeholder="画册大标题" className="w-full bg-[#141414] text-white border border-[#333] rounded px-3 py-2 text-xs outline-none focus:border-white font-bold" />
             <textarea value={editorialText} onChange={e => setEditorialText(e.target.value)} placeholder="在此粘贴长文章..." className="w-full h-48 bg-[#141414] text-gray-200 border border-[#333] rounded p-3 text-xs leading-relaxed outline-none focus:border-white resize-none font-mono" />
           </div>
         </div>
       </div>
 
-      {/* 右侧实时渲染与预览区 */}
-      <div className="flex-1 h-screen bg-[#121212] overflow-y-auto p-12 flex flex-col items-center gap-16 pb-32">
+      {/* 右侧实时渲染与预览区（绑定了全局划词监听 onMouseUp） */}
+      <div 
+        className="flex-1 h-screen bg-[#121212] overflow-y-auto p-12 flex flex-col items-center gap-16 pb-32"
+        onMouseUp={handleSelection}
+      >
         
         {/* 封面预览渲染 */}
         <div className="flex flex-col items-center gap-3 group">
@@ -437,12 +518,16 @@ export default function EditorPage() {
                   <span className="text-xs font-bold font-mono">{String(pageIndex + 1).padStart(2, '0')}</span>
                 </div>
 
-                {/* 正文内容区（无全局遮罩，原图直出） */}
-                <div className="flex-1 py-6 overflow-hidden flex flex-col justify-start text-justify tracking-wide" style={{ fontSize: `${FONT_SIZE_MAP[edSizeLabel]}px`, lineHeight: ADVANCED_LINE_HEIGHT }}>
+                {/* 正文内容区（加入富文本渲染识别 [H] 标签） */}
+                <div className="flex-1 py-6 overflow-hidden flex flex-col justify-start text-justify tracking-wide selection:bg-black/20" style={{ fontSize: `${FONT_SIZE_MAP[edSizeLabel]}px`, lineHeight: ADVANCED_LINE_HEIGHT }}>
                   <div className="space-y-4">
                     {pageBlocks.map((block, bIdx) => {
                       if (block.type === 'text') {
-                        return <div key={bIdx} className="whitespace-pre-wrap">{block.content}</div>
+                        return (
+                          <div key={bIdx} className="whitespace-pre-wrap">
+                            {renderTextWithHighlights(block.content)}
+                          </div>
+                        )
                       }
                       if (block.type === 'image') {
                         const imgSrc = activeImages[block.index]?.url
@@ -459,7 +544,7 @@ export default function EditorPage() {
                   </div>
                 </div>
 
-                {/* 页脚区（已按要求去掉了顶栏横线与特定版权标语） */}
+                {/* 页脚区 */}
                 <div className="flex justify-between items-center tracking-widest opacity-40 uppercase pt-4 shrink-0 text-[10px] font-mono" style={{ fontFamily: STRICT_SANS_SERIF }}>
                   <div>
                     {edDisplayMode === 'logo' && edLogo && <img src={edLogo} className="h-6 max-w-[100px] object-contain opacity-80" alt="Footer Logo" />}
