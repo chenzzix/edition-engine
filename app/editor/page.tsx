@@ -35,7 +35,7 @@ export default function EditorPage() {
   const [edStudioName, setEdStudioName] = useState('EDITORIAL TYPOGRAPHY®') 
   const [edCoverSubtitle, setEdCoverSubtitle] = useState('STUDIO ARCHIVE / VOL.01') 
   
-  // 5. 默认占位标题改成“设计中的留白与呼吸”
+  // 细节5：默认大标题修改
   const [edTitle, setEdTitle] = useState('设计中的留白与呼吸')
   
   const [edLogo, setEdLogo] = useState<string>('')
@@ -65,7 +65,6 @@ export default function EditorPage() {
 
   const activeImages = useMemo(() => bodyImages.filter(img => img.checked), [bodyImages])
 
-  // 计算字数
   const totalChars = useMemo(() => {
     return editorialText
       .replace(/\[IMG\]/g, '')
@@ -77,7 +76,7 @@ export default function EditorPage() {
     return Math.max(1, Math.ceil(totalChars / 350))
   }, [totalChars])
 
-  // 高度智能化的分页引擎（按行精准切分，彻底消除大面积无用留白）
+  // 重构版物理分页引擎（严格 DOM 同步，彻底消除大留白）
   const editorialPages = useMemo(() => {
     if (!mounted) return []
 
@@ -88,30 +87,30 @@ export default function EditorPage() {
     const canvasHeight = edRatio === '3:4' ? 960 : 1280
     const headerFooterOverhead = 90
     const availableHeight = canvasHeight - ADVANCED_PADDING_Y * 2 - headerFooterOverhead
-    const maxLinesPerPage = Math.floor(availableHeight / (currentFontSize * ADVANCED_LINE_HEIGHT))
+    const maxLinesPerPage = availableHeight / (currentFontSize * ADVANCED_LINE_HEIGHT)
 
     const paragraphs = editorialText.split('\n')
     const pages: ContentBlock[][] = []
 
     let currentBlocks: ContentBlock[] = []
-    let currentChunk = ''
     let currentLines = 0
     let imageCounter = 0
 
-    const pushTextChunk = () => {
-      if (currentChunk.trim()) {
-        currentBlocks.push({ type: 'text', content: currentChunk.trimEnd() })
-        currentChunk = ''
-      }
-    }
-
     const startNewPage = () => {
-      pushTextChunk()
       if (currentBlocks.length > 0) {
         pages.push(currentBlocks)
         currentBlocks = []
         currentLines = 0
       }
+    }
+
+    // 视觉长度计算：英文标点等占 0.55 个汉字位，修正排版偏差
+    const getVisualLength = (str: string) => {
+      let len = 0
+      for (let i = 0; i < str.length; i++) {
+        len += str.charCodeAt(i) > 255 ? 1 : 0.55
+      }
+      return len
     }
 
     paragraphs.forEach((para) => {
@@ -120,55 +119,92 @@ export default function EditorPage() {
           if (currentLines + IMG_GRID_LINES > maxLinesPerPage && currentLines > 0) {
             startNewPage()
           }
-          pushTextChunk()
           currentBlocks.push({ type: 'image', index: imageCounter++ })
-          currentLines += IMG_GRID_LINES
+          currentLines += IMG_GRID_LINES + 0.5 // +0.5 对应 DOM 中的 space-y-4 margin
         }
         return
       }
 
+      // 处理多余的纯空行
       if (!para.trim()) {
-        currentChunk += '\n'
-        currentLines += 0.8
+        if (currentLines + 1.5 > maxLinesPerPage && currentLines > 0) {
+          startNewPage()
+        }
+        currentBlocks.push({ type: 'text', content: ' ' })
+        currentLines += 1.5
         return
       }
 
       let remainingText = para
       while (remainingText.length > 0) {
         const cleanForMath = remainingText.replace(/\[\/?H\]/g, '')
-        const neededLines = Math.max(1, Math.ceil(cleanForMath.length / charsPerLine))
+        const visualLen = getVisualLength(cleanForMath)
+        const neededLines = Math.max(1, Math.ceil(visualLen / charsPerLine))
         const availableLines = maxLinesPerPage - currentLines
 
-        if (neededLines <= availableLines || availableLines < 1.5) {
-          if (availableLines < 1.5 && neededLines > availableLines && currentLines > 0) {
+        if (neededLines <= availableLines || availableLines < 1) {
+          // 如果剩余空间极小，但这是本页第一行，强行装入，否则换页
+          if (availableLines < 1 && currentLines > 0) {
             startNewPage()
+            continue
           }
-          currentChunk += remainingText + '\n'
-          currentLines += Math.max(1, Math.ceil(remainingText.replace(/\[\/?H\]/g, '').length / charsPerLine)) + 0.5
+          currentBlocks.push({ type: 'text', content: remainingText })
+          currentLines += neededLines + 0.5 // +0.5 抵消 space-y-4 的 margin
           remainingText = ''
         } else {
-          // 当前页装不下整个段落时，按字符行数切分，填满当前页再分页
-          const maxCharsToFit = Math.floor(availableLines * charsPerLine)
+          // 当前页装不下，逐字切割
+          let cutIdx = 0
+          let currentVisualLen = 0
+          let realIdx = 0
+          const maxVisualCapacity = availableLines * charsPerLine
           
-          if (maxCharsToFit > 15 && currentLines > 0) {
-            let cutIdx = maxCharsToFit
-            
-            // 安全防切割：避免截断 [H] 标签
-            const sub = remainingText.slice(0, cutIdx)
-            const openTags = (sub.match(/\[H\]/g) || []).length
-            const closeTags = (sub.match(/\[\/H\]/g) || []).length
-            
-            if (openTags > closeTags) {
-              const lastOpen = sub.lastIndexOf('[H]')
-              if (lastOpen > 0) cutIdx = lastOpen
+          while (realIdx < remainingText.length) {
+            // 安全跳过高亮标签，不计入排版长度
+            if (remainingText.startsWith('[H]', realIdx)) {
+              realIdx += 3
+              continue
+            }
+            if (remainingText.startsWith('[/H]', realIdx)) {
+              realIdx += 4
+              continue
             }
 
-            if (cutIdx > 10) {
-              const partToFit = remainingText.slice(0, cutIdx)
-              currentChunk += partToFit
-              remainingText = remainingText.slice(cutIdx)
+            const char = remainingText[realIdx]
+            const charLen = char.charCodeAt(0) > 255 ? 1 : 0.55
+            
+            if (currentVisualLen + charLen > maxVisualCapacity) {
+              break
+            }
+            currentVisualLen += charLen
+            realIdx++
+          }
+
+          cutIdx = realIdx
+
+          if (cutIdx === 0) {
+            if (currentLines > 0) {
+              startNewPage()
+              continue
+            } else {
+              cutIdx = 1
             }
           }
+
+          // 防切割保护：避免 [H] 被生硬截断
+          const sub = remainingText.slice(0, cutIdx)
+          const openTags = (sub.match(/\[H\]/g) || []).length
+          const closeTags = (sub.match(/\[\/H\]/g) || []).length
+          if (openTags > closeTags) {
+            const lastOpen = sub.lastIndexOf('[H]')
+            if (lastOpen > 0) cutIdx = lastOpen
+          }
+
+          const partToFit = remainingText.slice(0, cutIdx)
+          if (partToFit.trim()) {
+            currentBlocks.push({ type: 'text', content: partToFit })
+          }
+          
+          remainingText = remainingText.slice(cutIdx)
           startNewPage()
         }
       }
@@ -222,7 +258,6 @@ export default function EditorPage() {
     }
   }
 
-  // 执行小标题替换
   const applyHeadingHighlight = () => {
     if (tooltip.text) {
       const safeText = tooltip.text.replace(/\[\/?H\]/g, '')
@@ -298,7 +333,6 @@ export default function EditorPage() {
   return (
     <div className="flex h-screen w-full bg-[#121212] text-white font-sans overflow-hidden relative">
       
-      {/* 划词悬浮菜单 */}
       {tooltip.show && (
         <div
           className="fixed z-50 bg-white text-black text-[12px] font-black px-4 py-2 rounded-full shadow-2xl cursor-pointer transform -translate-x-1/2 flex items-center gap-2 hover:bg-gray-200 hover:scale-105 transition-all border border-black/10"
@@ -496,11 +530,11 @@ export default function EditorPage() {
                 )}
               </div>
 
-              {/* 封面文字区：6. 优化副标题字体并对齐大标题 */}
+              {/* 细节6: 副标题美观和谐并严格左对齐大标题 */}
               <div className="flex-1 p-16 flex flex-col justify-between">
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div 
-                    className="text-[13px] font-semibold tracking-[0.25em] uppercase opacity-60 pl-0.5" 
+                    className="text-[13px] font-semibold tracking-[0.25em] uppercase opacity-70" 
                     style={{ fontFamily: STRICT_SANS_SERIF }}
                   >
                     {edCoverSubtitle}
@@ -516,9 +550,9 @@ export default function EditorPage() {
                     <span>{edStudioName}</span>
                   </div>
                   
-                  {/* 4. 放大字数与阅读时间文字 */}
-                  <div className="text-right text-[15px] font-medium opacity-85 leading-relaxed">
-                    本文约 {totalChars} 字，阅读约 {readingTime} 分钟
+                  {/* 细节4: 放大字数阅读时间，调大到 15px 并加粗 */}
+                  <div className="text-right text-[15px] font-bold opacity-90 leading-relaxed tracking-wider">
+                    本文约 {totalChars} 字，阅读需要 {readingTime} 分钟
                   </div>
                 </div>
               </div>
@@ -576,8 +610,8 @@ export default function EditorPage() {
                   </div>
                 </div>
 
-                {/* 3. 去掉正文页左下角 Logo，保持极简 */}
-                <div className="flex justify-between items-center tracking-widest opacity-40 uppercase pt-4 shrink-0 text-[10px] font-mono" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                {/* 细节3: 去掉正文左下角 Logo，保留干练极简页脚 */}
+                <div className="flex justify-between items-center tracking-widest opacity-40 uppercase pt-4 shrink-0 text-[10px] font-mono border-t" style={{ borderColor: `${edTextColor}11`, fontFamily: STRICT_SANS_SERIF }}>
                   <div></div>
                   <div>EDITION 2026</div>
                 </div>
