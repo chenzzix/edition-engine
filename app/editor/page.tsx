@@ -46,6 +46,7 @@ export default function EditorialEditorV7() {
   const [bodyImages, setBodyImages] = useState<{ url: string; checked: boolean }[]>([])
 
   const [coverMaskOpacity, setCoverMaskOpacity] = useState(0)
+
   const [edSizeLabel, setEdSizeLabel] = useState<'S' | 'M' | 'L' | 'XL'>('M')
   
   const [edCoverImage, setEdCoverImage] = useState<string>('')
@@ -58,6 +59,7 @@ export default function EditorialEditorV7() {
   const [textB, setTextB] = useState(28)
 
   const [isExporting, setIsExporting] = useState(false)
+  
   const [tooltip, setTooltip] = useState({ show: false, text: '', x: 0, y: 0 })
 
   useEffect(() => { setMounted(true) }, [])
@@ -172,6 +174,21 @@ export default function EditorialEditorV7() {
             if (currentLines > 0) { startNewPage(); continue } else { cutIdx = 1 }
           }
 
+          const sub = remainingText.slice(0, cutIdx)
+          const openSub = (sub.match(/\[SUB\]/g) || []).length
+          const closeSub = (sub.match(/\[\/SUB\]/g) || []).length
+          if (openSub > closeSub) {
+            const lastOpen = sub.lastIndexOf('[SUB]')
+            if (lastOpen > 0) cutIdx = lastOpen
+          }
+
+          const openHl = (sub.match(/\[HL\]/g) || []).length
+          const closeHl = (sub.match(/\[\/HL\]/g) || []).length
+          if (openHl > closeHl) {
+            const lastOpen = sub.lastIndexOf('[HL]')
+            if (lastOpen > 0) cutIdx = lastOpen
+          }
+
           const partToFit = remainingText.slice(0, cutIdx)
           if (partToFit.trim()) {
             currentBlocks.push({ type: 'text', content: partToFit })
@@ -215,7 +232,9 @@ export default function EditorialEditorV7() {
           <span 
             key={i} 
             className="px-1 mx-[1px] rounded-sm transition-colors"
-            style={{ backgroundColor: 'rgba(128, 128, 128, 0.18)' }}
+            style={{ 
+              backgroundColor: 'rgba(128, 128, 128, 0.18)', 
+            }}
           >
             {innerText}
           </span>
@@ -257,29 +276,39 @@ export default function EditorialEditorV7() {
   }
 
   const handleEdCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) setEdCoverImage(URL.createObjectURL(e.target.files[0]))
+    if (e.target.files && e.target.files[0]) {
+      const reader = new FileReader()
+      reader.onload = () => setEdCoverImage(reader.result as string)
+      reader.readAsDataURL(e.target.files[0])
+    }
   }
 
   const handleEdLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) setEdLogo(URL.createObjectURL(e.target.files[0]))
+    if (e.target.files && e.target.files[0]) {
+      const reader = new FileReader()
+      reader.onload = () => setEdLogo(reader.result as string)
+      reader.readAsDataURL(e.target.files[0])
+    }
   }
 
   const handleBodyImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setBodyImages(prev => [...prev, { url: URL.createObjectURL(e.target.files![0]), checked: true }])
+      const reader = new FileReader()
+      reader.onload = () => setBodyImages(prev => [...prev, { url: reader.result as string, checked: true }])
+      reader.readAsDataURL(e.target.files[0])
     }
   }
 
   const exportAsImage = async (id: string, name: string) => {
     const node = document.getElementById(id)
     if (!node) return
-    const targetHeight = edRatio === '3:4' ? 960 : 1280
+    const images = Array.from(node.querySelectorAll('img'))
+    await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise(resolve => { img.onload = resolve; img.onerror = resolve })))
+
     const dataUrl = await toPng(node, { 
       quality: 1, 
       pixelRatio: 2.5,
-      backgroundColor: edBgColor,
-      width: 720,
-      height: targetHeight
+      backgroundColor: edBgColor 
     })
     const link = document.createElement('a')
     link.download = `${name}.png`
@@ -320,11 +349,17 @@ export default function EditorialEditorV7() {
           className="fixed z-50 bg-white text-black text-[12px] font-black p-1 rounded-lg shadow-2xl cursor-pointer transform -translate-x-1/2 flex items-center gap-1 border border-black/10"
           style={{ left: tooltip.x, top: tooltip.y }}
         >
-          <button onClick={() => applyFormat('sub')} className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5">
+          <button 
+            onClick={() => applyFormat('sub')} 
+            className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5"
+          >
             <span className="text-[14px]">T</span> 设为小标题
           </button>
           <div className="w-[1px] h-4 bg-gray-200 mx-1"></div>
-          <button onClick={() => applyFormat('hl')} className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5">
+          <button 
+            onClick={() => applyFormat('hl')} 
+            className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5"
+          >
             <span className="text-[14px]">🖍️</span> 重点划线
           </button>
         </div>
@@ -465,7 +500,7 @@ export default function EditorialEditorV7() {
                 <div className="grid grid-cols-4 gap-2">
                   {bodyImages.map((imgObj, idx) => (
                     <div key={idx} className="relative aspect-square bg-zinc-200 rounded-lg overflow-hidden border border-zinc-300 group/img shadow-sm">
-                      <img src={imgObj.url} className={`w-full h-full object-cover transition-all ${!imgObj.checked ? 'opacity-30 grayscale scale-95' : ''}`} alt="body asset" />
+                      <img crossOrigin="anonymous" src={imgObj.url} className={`w-full h-full object-cover transition-all ${!imgObj.checked ? 'opacity-30 grayscale scale-95' : ''}`} alt="body asset" />
                       <div className="absolute bottom-1 left-1 bg-black/70 rounded p-1 flex items-center justify-center backdrop-blur-sm z-10 border border-white/20">
                         <input 
                           type="checkbox" 
@@ -500,7 +535,6 @@ export default function EditorialEditorV7() {
       >
         <div className="w-full flex flex-col items-center gap-20">
           
-          {/* 封面渲染区：使用外部容器包裹，内部导出节点无任何 transform */}
           <div className="flex flex-col items-center gap-4 group">
             <div className="flex items-center justify-between w-[360px]">
               <span className="text-[10px] font-black opacity-40 tracking-widest uppercase">PAGE 00 // COVER PAGE</span>
@@ -508,60 +542,57 @@ export default function EditorialEditorV7() {
             </div>
             
             <div className="bg-white shadow-2xl relative overflow-hidden transition-transform duration-300 group-hover:shadow-3xl" style={{ width: '360px', height: edRatio === '3:4' ? '480px' : '640px' }}>
-              <div style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left' }}>
-                <div id="ed-cover" className="flex flex-col" style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', backgroundColor: edBgColor, fontFamily: getFontFamilyStyle(edFontFamily) }}>
+              <div id="ed-cover" className="absolute inset-0 flex flex-col" style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left', backgroundColor: edBgColor, fontFamily: getFontFamilyStyle(edFontFamily) }}>
+                
+                <div className="relative overflow-hidden shrink-0 bg-zinc-200/60" style={{ height: `${edCoverWeight}%` }}>
+                  {edCoverImage ? (
+                    <>
+                      <img crossOrigin="anonymous" src={edCoverImage} className="w-full h-full object-cover" alt="Cover" />
+                      <div className="absolute inset-0 bg-black pointer-events-none transition-opacity" style={{ opacity: coverMaskOpacity / 100 }} />
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 font-mono text-[11px] uppercase tracking-widest gap-1"><span>[ NO COVER IMAGE LOADED ]</span></div>
+                  )}
                   
-                  <div className="relative overflow-hidden shrink-0 bg-zinc-200/60" style={{ height: `${edCoverWeight}%` }}>
-                    {edCoverImage ? (
-                      <>
-                        <img src={edCoverImage} className="w-full h-full object-cover" alt="Cover" />
-                        <div className="absolute inset-0 bg-black pointer-events-none transition-opacity" style={{ opacity: coverMaskOpacity / 100 }} />
-                      </>
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 font-mono text-[11px] uppercase tracking-widest gap-1"><span>[ NO COVER IMAGE LOADED ]</span></div>
-                    )}
-                    
-                    {edCoverWeight >= 75 && (
-                      <div className="absolute bottom-16 left-16 right-16 text-white flex flex-col justify-between">
-                        <div>
-                          <p className="font-serif font-medium text-[18px] tracking-[0.18em] mb-4 opacity-75">{edCoverSubtitle}</p>
-                          <h1 className="text-[56px] font-extrabold leading-[1.05] tracking-tighter drop-shadow-sm mb-8">{edTitle}</h1>
-                        </div>
-                        <div className="border-t border-white/30 pt-6 flex justify-between items-end tracking-wide">
-                          <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                            <span className="truncate">{edStudioName}</span>
-                          </div>
-                          <div className="text-right text-[16px] font-medium opacity-95 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                            本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {edCoverWeight < 75 && (
-                    <div className="flex-1 p-16 flex flex-col justify-between" style={{ color: computedTextColor }}>
+                  {edCoverWeight >= 75 && (
+                    <div className="absolute bottom-16 left-16 right-16 text-white flex flex-col justify-between">
                       <div>
                         <p className="font-serif font-medium text-[18px] tracking-[0.18em] mb-4 opacity-75">{edCoverSubtitle}</p>
-                        <h1 className="text-[64px] font-extrabold leading-[1.05] tracking-tighter">{edTitle}</h1>
+                        <h1 className="text-[56px] font-extrabold leading-[1.05] tracking-tighter drop-shadow-sm mb-8">{edTitle}</h1>
                       </div>
-                      
-                      <div className="border-t pt-6 flex justify-between items-end tracking-wide" style={{ borderColor: `${computedTextColor}22` }}>
+                      <div className="border-t border-white/30 pt-6 flex justify-between items-end tracking-wide">
                         <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
                           <span className="truncate">{edStudioName}</span>
                         </div>
-                        <div className="text-right text-[16px] font-medium opacity-90 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                        <div className="text-right text-[16px] font-medium opacity-95 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
                           本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
+                
+                {edCoverWeight < 75 && (
+                  <div className="flex-1 p-16 flex flex-col justify-between" style={{ color: computedTextColor }}>
+                    <div>
+                      <p className="font-serif font-medium text-[18px] tracking-[0.18em] mb-4 opacity-75">{edCoverSubtitle}</p>
+                      <h1 className="text-[64px] font-extrabold leading-[1.05] tracking-tighter">{edTitle}</h1>
+                    </div>
+                    
+                    <div className="border-t pt-6 flex justify-between items-end tracking-wide" style={{ borderColor: `${computedTextColor}22` }}>
+                      <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                        <span className="truncate">{edStudioName}</span>
+                      </div>
+                      <div className="text-right text-[16px] font-medium opacity-90 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                        本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* 正文页渲染区：使用外部容器包裹，内部导出节点无任何 transform */}
           {editorialPages.map((blocks, index) => (
             <div key={index} className="flex flex-col items-center gap-4 group">
               <div className="flex items-center justify-between w-[360px]">
@@ -570,52 +601,51 @@ export default function EditorialEditorV7() {
               </div>
               
               <div className="bg-white shadow-xl relative overflow-hidden transition-all duration-300 group-hover:shadow-2xl" style={{ width: '360px', height: edRatio === '3:4' ? '480px' : '640px' }}>
-                <div style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left' }}>
-                  <div id={`ed-page-${index}`} className="flex flex-col justify-between" style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', backgroundColor: edBgColor, color: computedTextColor, padding: `${ADVANCED_PADDING_Y}px ${ADVANCED_PADDING_X}px`, fontFamily: getFontFamilyStyle(edFontFamily) }}>
-                    
-                    <div className="flex justify-between items-center border-b pb-4 tracking-widest opacity-40 uppercase shrink-0" style={{ borderColor: `${computedTextColor}22`, fontFamily: STRICT_SANS_SERIF }}>
-                      <div className="flex items-center gap-3">
-                        {(edDisplayMode === 'logo') && edLogo ? (
-                          <img src={edLogo} className="h-10 max-w-[150px] object-contain" alt="Header Logo" />
-                        ) : null}
-                        {(edDisplayMode === 'text' || (!edLogo && edDisplayMode === 'logo')) && (
-                          <span className="text-[14px] font-bold">{edStudioName}</span>
-                        )}
-                      </div>
-                      <span className="text-[14px] font-bold">{String(index + 1).padStart(2, '0')}</span>
+                
+                <div id={`ed-page-${index}`} className="absolute inset-0 flex flex-col justify-between" style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left', backgroundColor: edBgColor, color: computedTextColor, padding: `${ADVANCED_PADDING_Y}px ${ADVANCED_PADDING_X}px`, fontFamily: getFontFamilyStyle(edFontFamily) }}>
+                  
+                  <div className="flex justify-between items-center border-b pb-4 tracking-widest opacity-40 uppercase shrink-0" style={{ borderColor: `${computedTextColor}22`, fontFamily: STRICT_SANS_SERIF }}>
+                    <div className="flex items-center gap-3">
+                      {(edDisplayMode === 'logo') && edLogo ? (
+                        <img crossOrigin="anonymous" src={edLogo} className="h-10 max-w-[150px] object-contain" alt="Header Logo" />
+                      ) : null}
+                      {(edDisplayMode === 'text' || (!edLogo && edDisplayMode === 'logo')) && (
+                        <span className="text-[14px] font-bold">{edStudioName}</span>
+                      )}
                     </div>
-                    
-                    <div className="flex-1 py-6 text-justify overflow-hidden tracking-wide flex flex-col justify-start" style={{ fontSize: `${FONT_SIZE_MAP[edSizeLabel]}px`, lineHeight: ADVANCED_LINE_HEIGHT }}>
-                      <div className="space-y-4">
-                        {blocks.map((block, bIdx) => {
-                          if (block.type === 'text') {
-                            return <div key={bIdx} className="whitespace-pre-wrap">{renderRichText(block.content)}</div>
-                          } else {
-                            const imgSrc = activeImages[block.index]?.url
-                            const targetHeight = IMG_GRID_LINES * FONT_SIZE_MAP[edSizeLabel] * ADVANCED_LINE_HEIGHT
-                            const bottomMargin = FONT_SIZE_MAP[edSizeLabel] * ADVANCED_LINE_HEIGHT
-
-                            return (
-                              <div key={bIdx} className="w-full relative overflow-hidden bg-zinc-200/40 rounded shadow-sm" style={{ height: targetHeight, marginBottom: bottomMargin }}>
-                                {imgSrc ? (
-                                  <img src={imgSrc} className="w-full h-full object-cover" alt="Editorial Body" />
-                                ) : (
-                                  <div className="absolute inset-0 flex items-center justify-center text-[11px] font-mono tracking-widest text-zinc-500 border border-dashed border-zinc-400">
-                                    [ MISSING ACTIVE IMAGE ASSET ]
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          }
-                        })}
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-end items-center tracking-widest opacity-30 uppercase pt-4 shrink-0" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                      <span className="text-[11px] font-bold">EDITION 2026</span>
-                    </div>
-
+                    <span className="text-[14px] font-bold">{String(index + 1).padStart(2, '0')}</span>
                   </div>
+                  
+                  <div className="flex-1 py-6 text-justify overflow-hidden tracking-wide flex flex-col justify-start" style={{ fontSize: `${FONT_SIZE_MAP[edSizeLabel]}px`, lineHeight: ADVANCED_LINE_HEIGHT }}>
+                    <div className="space-y-4">
+                      {blocks.map((block, bIdx) => {
+                        if (block.type === 'text') {
+                          return <div key={bIdx} className="whitespace-pre-wrap">{renderRichText(block.content)}</div>
+                        } else {
+                          const imgSrc = activeImages[block.index]?.url
+                          const targetHeight = IMG_GRID_LINES * FONT_SIZE_MAP[edSizeLabel] * ADVANCED_LINE_HEIGHT
+                          const bottomMargin = FONT_SIZE_MAP[edSizeLabel] * ADVANCED_LINE_HEIGHT
+
+                          return (
+                            <div key={bIdx} className="w-full relative overflow-hidden bg-zinc-200/40 rounded shadow-sm" style={{ height: targetHeight, marginBottom: bottomMargin }}>
+                              {imgSrc ? (
+                                <img crossOrigin="anonymous" src={imgSrc} className="w-full h-full object-cover" alt="Editorial Body" />
+                              ) : (
+                                <div className="absolute inset-0 flex items-center justify-center text-[11px] font-mono tracking-widest text-zinc-500 border border-dashed border-zinc-400">
+                                  [ MISSING ACTIVE IMAGE ASSET ]
+                                </div>
+                              )}
+                            </div>
+                          )
+                        }
+                      })}
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end items-center tracking-widest opacity-30 uppercase pt-4 shrink-0" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                    <span className="text-[11px] font-bold">EDITION 2026</span>
+                  </div>
+
                 </div>
               </div>
             </div>
