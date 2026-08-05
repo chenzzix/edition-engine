@@ -59,7 +59,6 @@ export default function EditorialEditorV7() {
   const [textB, setTextB] = useState(28)
 
   const [isExporting, setIsExporting] = useState(false)
-  
   const [tooltip, setTooltip] = useState({ show: false, text: '', x: 0, y: 0 })
 
   useEffect(() => { setMounted(true) }, [])
@@ -75,6 +74,7 @@ export default function EditorialEditorV7() {
     return { charCount, readingTime }
   }, [editorialText])
 
+  // 优化后的精准分页引擎：支持字符/行级拆分，消灭底部空白
   const editorialPages = useMemo(() => {
     if (!mounted) return []
 
@@ -174,21 +174,6 @@ export default function EditorialEditorV7() {
             if (currentLines > 0) { startNewPage(); continue } else { cutIdx = 1 }
           }
 
-          const sub = remainingText.slice(0, cutIdx)
-          const openSub = (sub.match(/\[SUB\]/g) || []).length
-          const closeSub = (sub.match(/\[\/SUB\]/g) || []).length
-          if (openSub > closeSub) {
-            const lastOpen = sub.lastIndexOf('[SUB]')
-            if (lastOpen > 0) cutIdx = lastOpen
-          }
-
-          const openHl = (sub.match(/\[HL\]/g) || []).length
-          const closeHl = (sub.match(/\[\/HL\]/g) || []).length
-          if (openHl > closeHl) {
-            const lastOpen = sub.lastIndexOf('[HL]')
-            if (lastOpen > 0) cutIdx = lastOpen
-          }
-
           const partToFit = remainingText.slice(0, cutIdx)
           if (partToFit.trim()) {
             currentBlocks.push({ type: 'text', content: partToFit })
@@ -232,9 +217,7 @@ export default function EditorialEditorV7() {
           <span 
             key={i} 
             className="px-1 mx-[1px] rounded-sm transition-colors"
-            style={{ 
-              backgroundColor: 'rgba(128, 128, 128, 0.18)', 
-            }}
+            style={{ backgroundColor: 'rgba(128, 128, 128, 0.18)' }}
           >
             {innerText}
           </span>
@@ -289,13 +272,17 @@ export default function EditorialEditorV7() {
     }
   }
 
+  // 修复：显式指定 width 和 height，彻底消除右侧空白和裁切异常
   const exportAsImage = async (id: string, name: string) => {
     const node = document.getElementById(id)
     if (!node) return
+    const targetHeight = edRatio === '3:4' ? 960 : 1280
     const dataUrl = await toPng(node, { 
       quality: 1, 
       pixelRatio: 2.5,
-      backgroundColor: edBgColor 
+      backgroundColor: edBgColor,
+      width: 720,
+      height: targetHeight
     })
     const link = document.createElement('a')
     link.download = `${name}.png`
@@ -336,17 +323,11 @@ export default function EditorialEditorV7() {
           className="fixed z-50 bg-white text-black text-[12px] font-black p-1 rounded-lg shadow-2xl cursor-pointer transform -translate-x-1/2 flex items-center gap-1 border border-black/10"
           style={{ left: tooltip.x, top: tooltip.y }}
         >
-          <button 
-            onClick={() => applyFormat('sub')} 
-            className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5"
-          >
+          <button onClick={() => applyFormat('sub')} className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5">
             <span className="text-[14px]">T</span> 设为小标题
           </button>
           <div className="w-[1px] h-4 bg-gray-200 mx-1"></div>
-          <button 
-            onClick={() => applyFormat('hl')} 
-            className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5"
-          >
+          <button onClick={() => applyFormat('hl')} className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5">
             <span className="text-[14px]">🖍️</span> 重点划线
           </button>
         </div>
