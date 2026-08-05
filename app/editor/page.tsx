@@ -60,14 +60,12 @@ export default function EditorialEditorV7() {
 
   const [isExporting, setIsExporting] = useState(false)
   
-  // 悬浮划词高亮工具条状态
   const [tooltip, setTooltip] = useState({ show: false, text: '', x: 0, y: 0 })
 
   useEffect(() => { setMounted(true) }, [])
 
   const activeImages = useMemo(() => bodyImages.filter(img => img.checked), [bodyImages])
 
-  // 计算字数（剥离掉 SUB 和 HL 标签）
   const edStats = useMemo(() => {
     const cleanText = editorialText
       .replace(/\[IMG\]/g, '')
@@ -77,7 +75,6 @@ export default function EditorialEditorV7() {
     return { charCount, readingTime }
   }, [editorialText])
 
-  // 重构版物理分页引擎（完美兼容大号小标题的高度补偿）
   const editorialPages = useMemo(() => {
     if (!mounted) return []
 
@@ -136,7 +133,6 @@ export default function EditorialEditorV7() {
 
       let remainingText = para
       while (remainingText.length > 0) {
-        // 补偿小标题的额外高度 (字体更大且有 margin)
         const isSubtitleBlock = remainingText.includes('[SUB]')
         const heightCompensation = isSubtitleBlock ? 1.5 : 0 
 
@@ -160,7 +156,6 @@ export default function EditorialEditorV7() {
           const maxVisualCapacity = availableLines * charsPerLine
           
           while (realIdx < remainingText.length) {
-            // 安全跳过标签
             if (remainingText.startsWith('[SUB]', realIdx)) { realIdx += 5; continue }
             if (remainingText.startsWith('[/SUB]', realIdx)) { realIdx += 6; continue }
             if (remainingText.startsWith('[HL]', realIdx)) { realIdx += 4; continue }
@@ -179,7 +174,6 @@ export default function EditorialEditorV7() {
             if (currentLines > 0) { startNewPage(); continue } else { cutIdx = 1 }
           }
 
-          // 防切割保护：确保标签不会被劈成两半
           const sub = remainingText.slice(0, cutIdx)
           const openSub = (sub.match(/\[SUB\]/g) || []).length
           const closeSub = (sub.match(/\[\/SUB\]/g) || []).length
@@ -210,12 +204,10 @@ export default function EditorialEditorV7() {
     return pages
   }, [editorialText, edRatio, edSizeLabel, activeImages, mounted])
 
-  // 处理富文本渲染：解析 [SUB] 小标题 和 [HL] 划线高亮
   const renderRichText = (content: string) => {
     const parts = content.split(/(\[SUB\].*?\[\/SUB\]|\[HL\].*?\[\/HL\])/g)
     
     return parts.map((part, i) => {
-      // 1. 小标题渲染逻辑 (字号放大、加粗、上下间距、衬线体)
       if (part.startsWith('[SUB]') && part.endsWith('[/SUB]')) {
         const innerText = part.slice(5, -6)
         return (
@@ -234,7 +226,6 @@ export default function EditorialEditorV7() {
         )
       }
       
-      // 2. 划线高亮渲染逻辑 (浅色透视背景，极简出版物质感)
       if (part.startsWith('[HL]') && part.endsWith('[/HL]')) {
         const innerText = part.slice(4, -5)
         return (
@@ -254,7 +245,6 @@ export default function EditorialEditorV7() {
     })
   }
 
-  // 划词选取事件监听
   const handleSelection = () => {
     const selection = window.getSelection()
     const text = selection?.toString().trim()
@@ -267,14 +257,13 @@ export default function EditorialEditorV7() {
         show: true,
         text,
         x: rect.left + rect.width / 2,
-        y: rect.top - 50 // 菜单向上偏移
+        y: rect.top - 50
       })
     } else {
       setTooltip({ show: false, text: '', x: 0, y: 0 })
     }
   }
 
-  // 执行排版标签注入
   const applyFormat = (type: 'sub' | 'hl') => {
     if (tooltip.text) {
       const safeText = tooltip.text.replace(/\[\/?(SUB|HL)\]/g, '')
@@ -342,7 +331,6 @@ export default function EditorialEditorV7() {
   return (
     <main className="min-h-screen bg-[#F0F0F0] flex flex-col lg:flex-row text-zinc-900 font-sans relative">
       
-      {/* 划词双模悬浮菜单 */}
       {tooltip.show && (
         <div
           className="fixed z-50 bg-white text-black text-[12px] font-black p-1 rounded-lg shadow-2xl cursor-pointer transform -translate-x-1/2 flex items-center gap-1 border border-black/10"
@@ -372,7 +360,6 @@ export default function EditorialEditorV7() {
         </div>
       )}
 
-      {/* 左侧控制面板 */}
       <aside className="w-full lg:w-[420px] bg-white h-screen overflow-y-auto p-6 border-r shrink-0 z-20 shadow-xl flex flex-col justify-between">
         <div className="space-y-6 pb-12">
           <div className="flex items-center justify-between border-b pb-4">
@@ -529,16 +516,12 @@ export default function EditorialEditorV7() {
         </div>
       </aside>
 
-      {/* 右侧渲染区 */}
       <section 
         className="flex-1 h-screen overflow-y-auto p-8 lg:p-16 bg-[#E8E8E8] flex flex-col items-center gap-16 pb-44"
         onMouseUp={handleSelection}
       >
         <div className="w-full flex flex-col items-center gap-20">
           
-          {/* ========================================== */}
-          {/* 1. 独立封面页 */}
-          {/* ========================================== */}
           <div className="flex flex-col items-center gap-4 group">
             <div className="flex items-center justify-between w-[360px]">
               <span className="text-[10px] font-black opacity-40 tracking-widest uppercase">PAGE 00 // COVER PAGE</span>
@@ -597,9 +580,6 @@ export default function EditorialEditorV7() {
             </div>
           </div>
 
-          {/* ========================================== */}
-          {/* 2. 正文分页列表 */}
-          {/* ========================================== */}
           {editorialPages.map((blocks, index) => (
             <div key={index} className="flex flex-col items-center gap-4 group">
               <div className="flex items-center justify-between w-[360px]">
@@ -611,7 +591,6 @@ export default function EditorialEditorV7() {
                 
                 <div id={`ed-page-${index}`} className="absolute inset-0 flex flex-col justify-between" style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left', backgroundColor: edBgColor, color: computedTextColor, padding: `${ADVANCED_PADDING_Y}px ${ADVANCED_PADDING_X}px`, fontFamily: getFontFamilyStyle(edFontFamily) }}>
                   
-                  {/* 正文页眉 */}
                   <div className="flex justify-between items-center border-b pb-4 tracking-widest opacity-40 uppercase shrink-0" style={{ borderColor: `${computedTextColor}22`, fontFamily: STRICT_SANS_SERIF }}>
                     <div className="flex items-center gap-3">
                       {(edDisplayMode === 'logo') && edLogo ? (
@@ -624,7 +603,6 @@ export default function EditorialEditorV7() {
                     <span className="text-[14px] font-bold">{String(index + 1).padStart(2, '0')}</span>
                   </div>
                   
-                  {/* 正文内容区 */}
                   <div className="flex-1 py-6 text-justify overflow-hidden tracking-wide flex flex-col justify-start" style={{ fontSize: `${FONT_SIZE_MAP[edSizeLabel]}px`, lineHeight: ADVANCED_LINE_HEIGHT }}>
                     <div className="space-y-4">
                       {blocks.map((block, bIdx) => {
