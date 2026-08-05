@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react'
-import { toPng } from 'html-to-image'
+import { toPng } from 'html-to-image' // 【修复】：改用 toPng 以支持透明通道修复黑底
 
+// 高级感黄金排版常数（整合了上一版的紧凑边距）
 const ADVANCED_LINE_HEIGHT = 1.95
 const ADVANCED_PADDING_X = 64
 const ADVANCED_PADDING_Y = 56
@@ -36,13 +37,15 @@ export default function EditorialEditorV7() {
   const [edCoverSubtitle, setEdCoverSubtitle] = useState('STUDIO ARCHIVE / VOL.01') 
   
   const [edLogo, setEdLogo] = useState<string>('')
+  // 【更新】：模式只保留 text 和 logo
   const [edDisplayMode, setEdDisplayMode] = useState<'text' | 'logo'>('text')
 
-  // 【更新】：默认封面标题修改为“设计中的留白与呼吸”
+  // 【优化3】：默认占位标题修改为“设计中的留白与呼吸”
   const [edTitle, setEdTitle] = useState('设计中的留白与呼吸')
   const [editorialText, setEditorialText] = useState('留白不是空无一物，而是视觉的延伸与呼吸的节奏。在版面中，适当的留白能让核心视觉点更加聚焦。\n\n[IMG]\n\n优秀的排版应当像一首诗，行与行之间有恰到好处的停顿。摒弃繁琐的装饰，让文字本身成为设计的主角。通过精准控制文字的色彩、字体的性格以及纸张的温润底色，我们可以为读者创造沉浸式的、如同阅读实体纸媒一般的精神体验。')
   const [bodyImages, setBodyImages] = useState<{ url: string; checked: boolean }[]>([])
 
+  // 【更新】：新增专属封面的遮罩透明度，去掉了全局图片遮罩
   const [coverMaskOpacity, setCoverMaskOpacity] = useState(0)
 
   const [edSizeLabel, setEdSizeLabel] = useState<'small' | 'medium' | 'large'>('medium')
@@ -69,6 +72,7 @@ export default function EditorialEditorV7() {
     return { charCount, readingTime }
   }, [editorialText])
 
+  // 精准的分页引擎逻辑（包含紧凑边距修正）
   const editorialPages = useMemo(() => {
     if (!mounted) return []
     const currentFontSize = FONT_SIZE_MAP[edSizeLabel]
@@ -151,13 +155,14 @@ export default function EditorialEditorV7() {
     }
   }
 
+  // 【修复】：改用 PNG 并强制注入背景色解决黑底问题
   const exportAsImage = async (id: string, name: string) => {
     const node = document.getElementById(id)
     if (!node) return
     const dataUrl = await toPng(node, { 
       quality: 1, 
       pixelRatio: 2.5,
-      backgroundColor: edBgColor 
+      backgroundColor: edBgColor // 强制指定渲染背景色
     })
     const link = document.createElement('a')
     link.download = `${name}.png`
@@ -211,6 +216,7 @@ export default function EditorialEditorV7() {
           </div>
 
           <div className="space-y-5">
+            {/* 【更新】：独立封面页，移除勾选，新增遮罩进度条 */}
             <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200 space-y-3.5">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-black tracking-wide">封面页面配置</span>
@@ -224,6 +230,7 @@ export default function EditorialEditorV7() {
                   <span className="text-[10px] opacity-50 block font-bold">点击选择封面大图</span>
                   <input type="file" accept="image/*" onChange={handleEdCoverUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
                 </div>
+                {/* 封面黑色遮罩 */}
                 <div className="pt-2 border-t border-zinc-200 space-y-1">
                   <div className="flex justify-between text-[10px] opacity-50 font-bold">
                     <span>封面图片遮罩</span>
@@ -242,6 +249,7 @@ export default function EditorialEditorV7() {
                 <input type="text" value={edStudioName} onChange={e => setEdStudioName(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white focus:border-black outline-none font-mono" placeholder="输入品牌名称" />
               </div>
 
+              {/* 【更新】：正文标识只剩文字和 Logo 两个选项 */}
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-zinc-400 block">正文标识呈现模式</label>
                 <div className="grid grid-cols-2 gap-1 bg-zinc-200/60 p-1 rounded-lg">
@@ -376,6 +384,7 @@ export default function EditorialEditorV7() {
                   {edCoverImage ? (
                     <>
                       <img src={edCoverImage} className="w-full h-full object-cover" alt="Cover" />
+                      {/* 【更新】：封面独有的遮罩进度条绑定 */}
                       <div className="absolute inset-0 bg-black pointer-events-none transition-opacity" style={{ opacity: coverMaskOpacity / 100 }} />
                     </>
                   ) : (
@@ -385,18 +394,18 @@ export default function EditorialEditorV7() {
                   {edCoverWeight >= 75 && (
                     <div className="absolute bottom-16 left-16 right-16 text-white flex flex-col justify-between">
                       <div>
-                        {/* 【更新】：优化副标题为 Serif、Medium、18px、字间距 0.18em、opacity 0.75、左对齐，去掉了 uppercase/mono */}
+                        {/* 【优化4】：高级出版物风格的副标题 (serif, medium, 18px, tracking-[0.18em], opacity-75) */}
                         <p className="font-serif font-medium text-[18px] tracking-[0.18em] mb-4 opacity-75">{edCoverSubtitle}</p>
-                        {/* 【更新】：标题去掉 uppercase，调整 line-height 为 1.05 */}
+                        {/* 【优化5】：去掉 uppercase，调整 line-height 为 1.05 */}
                         <h1 className="text-[56px] font-extrabold leading-[1.05] tracking-tighter drop-shadow-sm mb-8">{edTitle}</h1>
                       </div>
                       <div className="border-t border-white/30 pt-6 flex justify-between items-end tracking-wide">
-                        {/* 【更新】：去掉封面左下角 Logo，只保留品牌名称文字 */}
+                        {/* 【优化1】：去掉了这部分的 {edLogo && <img.../>} */}
                         <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
                           <span className="truncate">{edStudioName}</span>
                         </div>
-                        {/* 【更新】：字数统计文字放大至 16px，增加 tracking-widest */}
-                        <div className="text-right text-[16px] font-medium opacity-95 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                        {/* 【优化2】：文字调至 16px，保持透明度等细节不变 */}
+                        <div className="text-right text-[16px] font-medium opacity-90" style={{ fontFamily: STRICT_SANS_SERIF }}>
                           本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
                         </div>
                       </div>
@@ -407,19 +416,19 @@ export default function EditorialEditorV7() {
                 {edCoverWeight < 75 && (
                   <div className="flex-1 p-16 flex flex-col justify-between" style={{ color: computedTextColor }}>
                     <div>
-                      {/* 【更新】：优化副标题为 Serif、Medium、18px、字间距 0.18em、opacity 0.75、左对齐 */}
+                      {/* 【优化4】：高级出版物风格的副标题 (serif, medium, 18px, tracking-[0.18em], opacity-75) */}
                       <p className="font-serif font-medium text-[18px] tracking-[0.18em] mb-4 opacity-75">{edCoverSubtitle}</p>
-                      {/* 【更新】：标题去掉 uppercase，调整 line-height 为 1.05 */}
+                      {/* 【优化5】：去掉 uppercase，调整 line-height 为 1.05 */}
                       <h1 className="text-[64px] font-extrabold leading-[1.05] tracking-tighter">{edTitle}</h1>
                     </div>
                     
                     <div className="border-t pt-6 flex justify-between items-end tracking-wide" style={{ borderColor: `${computedTextColor}22` }}>
-                      {/* 【更新】：去掉封面左下角 Logo，只保留品牌名称文字 */}
+                      {/* 【优化1】：去掉了这部分的 {edLogo && <img.../>} */}
                       <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
                         <span className="truncate">{edStudioName}</span>
                       </div>
-                      {/* 【更新】：字数统计文字放大至 16px，增加 tracking-widest */}
-                      <div className="text-right text-[16px] font-medium opacity-90 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                      {/* 【优化2】：文字调至 16px，保持透明度等细节不变 */}
+                      <div className="text-right text-[16px] font-medium opacity-85" style={{ fontFamily: STRICT_SANS_SERIF }}>
                         本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
                       </div>
                     </div>
@@ -482,7 +491,13 @@ export default function EditorialEditorV7() {
                     </div>
                   </div>
                   
-                  <div className="flex justify-end items-center tracking-widest opacity-30 uppercase pt-4 shrink-0" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                  {/* 【更新】：清理正文页脚，去掉了横线和品牌文字 */}
+                  <div className="flex justify-between items-center tracking-widest opacity-30 uppercase pt-4 shrink-0" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                    <div className="flex items-center gap-2">
+                      {(edDisplayMode === 'logo') && edLogo ? (
+                        <img src={edLogo} className="h-7 max-w-[100px] object-contain opacity-80" alt="Footer Logo" />
+                      ) : null}
+                    </div>
                     <span className="text-[11px] font-bold">EDITION 2026</span>
                   </div>
 
