@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react'
-import { toPng } from 'html-to-image'
+import { toPng } from 'html-to-image' 
 
 const ADVANCED_LINE_HEIGHT = 1.95
 const ADVANCED_PADDING_X = 64
@@ -10,11 +10,10 @@ const IMG_GRID_LINES = 12
 
 const STRICT_SANS_SERIF = 'system-ui, -apple-system, "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif'
 
-const FONT_SIZE_MAP: Record<string, number> = {
-  'S': 16,
-  'M': 18,
-  'L': 20,
-  'XL': 22,
+const FONT_SIZE_MAP = {
+  small: 18,
+  medium: 22,
+  large: 25,
 }
 
 const PREMIUM_BACKGROUNDS = [
@@ -39,15 +38,13 @@ export default function EditorialEditorV7() {
   const [edLogo, setEdLogo] = useState<string>('')
   const [edDisplayMode, setEdDisplayMode] = useState<'text' | 'logo'>('text')
 
-  const [edTitle, setEdTitle] = useState('设计中的留白与呼吸')
-  const [editorialText, setEditorialText] = useState(
-    `[SUB]留白不是空无一物，而是视觉的延伸与呼吸的节奏。[/SUB]\n\n在版面中，适当的留白能让核心视觉点更加聚焦。优秀的排版应当像一首诗，行与行之间有恰到好处的停顿。摒弃繁琐的装饰，让文字本身成为设计的主角。\n\n[IMG]\n\n通过精准控制文字的色彩、字体的性格以及纸张的温润底色，我们可以为读者创造沉浸式的、[HL]如同阅读实体纸媒一般的精神体验[/HL]。这正是排版美学的终极意义。`
-  )
+  const [edTitle, setEdTitle] = useState('设计中的留白与呼吸感')
+  const [editorialText, setEditorialText] = useState('留白不是空无一物，而是视觉的延伸与呼吸的节奏。在版面中，适当的留白能让核心视觉点更加聚焦。\n\n[IMG]\n\n优秀的排版应当像一首诗，行与行之间有恰到好处的停顿。摒弃繁琐的装饰，让文字本身成为设计的主角。通过精准控制文字的色彩、字体的性格以及纸张的温润底色，我们可以为读者创造沉浸式的、如同阅读实体纸媒一般的精神体验。')
   const [bodyImages, setBodyImages] = useState<{ url: string; checked: boolean }[]>([])
 
   const [coverMaskOpacity, setCoverMaskOpacity] = useState(0)
 
-  const [edSizeLabel, setEdSizeLabel] = useState<'S' | 'M' | 'L' | 'XL'>('M')
+  const [edSizeLabel, setEdSizeLabel] = useState<'small' | 'medium' | 'large'>('medium')
   
   const [edCoverImage, setEdCoverImage] = useState<string>('')
   const [edCoverWeight, setEdCoverWeight] = useState(60) 
@@ -59,17 +56,13 @@ export default function EditorialEditorV7() {
   const [textB, setTextB] = useState(28)
 
   const [isExporting, setIsExporting] = useState(false)
-  
-  const [tooltip, setTooltip] = useState({ show: false, text: '', x: 0, y: 0 })
 
   useEffect(() => { setMounted(true) }, [])
 
   const activeImages = useMemo(() => bodyImages.filter(img => img.checked), [bodyImages])
 
   const edStats = useMemo(() => {
-    const cleanText = editorialText
-      .replace(/\[IMG\]/g, '')
-      .replace(/\[\/?(SUB|HL)\]/g, '')
+    const cleanText = editorialText.replace(/\[IMG\]/g, '')
     const charCount = cleanText.replace(/\s/g, '').length
     const readingTime = Math.max(1, Math.ceil(charCount / 350))
     return { charCount, readingTime }
@@ -77,238 +70,215 @@ export default function EditorialEditorV7() {
 
   const editorialPages = useMemo(() => {
     if (!mounted) return []
-
-    const currentFontSize = FONT_SIZE_MAP[edSizeLabel] || 18
-    const contentWidth = 720 - ADVANCED_PADDING_X * 2
-    const charsPerLine = Math.floor(contentWidth / currentFontSize)
-
+    const currentFontSize = FONT_SIZE_MAP[edSizeLabel]
+    const charsPerLine = Math.floor((720 - ADVANCED_PADDING_X * 2) / currentFontSize)
     const canvasHeight = edRatio === '3:4' ? 960 : 1280
-    const headerFooterOverhead = 90
+    
+    const headerFooterOverhead = 80 
     const availableHeight = canvasHeight - ADVANCED_PADDING_Y * 2 - headerFooterOverhead
-    const maxLinesPerPage = availableHeight / (currentFontSize * ADVANCED_LINE_HEIGHT)
+    const maxLines = Math.floor(availableHeight / (currentFontSize * ADVANCED_LINE_HEIGHT))
 
     const paragraphs = editorialText.split('\n')
-    const pages: ContentBlock[][] = []
-
+    const result: ContentBlock[][] = []
+    
     let currentBlocks: ContentBlock[] = []
+    let currentChunk = ""
     let currentLines = 0
     let imageCounter = 0
 
-    const startNewPage = () => {
+    const pushTextChunk = () => {
+      if (currentChunk.trim()) {
+        currentBlocks.push({ type: 'text', content: currentChunk.trimEnd() })
+        currentChunk = ""
+      }
+    }
+
+    const pushNewPage = () => {
+      pushTextChunk()
       if (currentBlocks.length > 0) {
-        pages.push(currentBlocks)
+        result.push(currentBlocks)
         currentBlocks = []
         currentLines = 0
       }
     }
 
-    const getVisualLength = (str: string) => {
-      let len = 0
-      for (let i = 0; i < str.length; i++) {
-        len += str.charCodeAt(i) > 255 ? 1 : 0.55
-      }
-      return len
-    }
-
-    paragraphs.forEach((para) => {
+    paragraphs.forEach(para => {
       if (para.trim() === '[IMG]') {
         if (imageCounter < activeImages.length) {
-          if (currentLines + IMG_GRID_LINES > maxLinesPerPage && currentLines > 0) {
-            startNewPage()
+          if (currentLines + IMG_GRID_LINES > maxLines && currentLines > 0) {
+            pushNewPage()
           }
+          pushTextChunk()
           currentBlocks.push({ type: 'image', index: imageCounter++ })
-          currentLines += IMG_GRID_LINES + 0.5
+          currentLines += IMG_GRID_LINES + 1 
         }
         return
       }
 
       if (!para.trim()) {
-        if (currentLines + 1.5 > maxLinesPerPage && currentLines > 0) {
-          startNewPage()
-        }
-        currentBlocks.push({ type: 'text', content: ' ' })
-        currentLines += 1.5
+        currentChunk += '\n'
+        currentLines += 1
         return
       }
 
-      let remainingText = para
-      while (remainingText.length > 0) {
-        const isSubtitleBlock = remainingText.includes('[SUB]')
-        const heightCompensation = isSubtitleBlock ? 1.5 : 0 
-
-        const cleanForMath = remainingText.replace(/\[\/?(SUB|HL)\]/g, '')
-        const visualLen = getVisualLength(cleanForMath)
-        const neededLines = Math.max(1, Math.ceil(visualLen / charsPerLine))
-        const availableLines = maxLinesPerPage - currentLines
-
-        if (neededLines + heightCompensation <= availableLines || availableLines < 1) {
-          if (availableLines < 1 && currentLines > 0) {
-            startNewPage()
-            continue
-          }
-          currentBlocks.push({ type: 'text', content: remainingText })
-          currentLines += neededLines + 0.5 + heightCompensation
-          remainingText = ''
-        } else {
-          let cutIdx = 0
-          let currentVisualLen = 0
-          let realIdx = 0
-          const maxVisualCapacity = availableLines * charsPerLine
-          
-          while (realIdx < remainingText.length) {
-            if (remainingText.startsWith('[SUB]', realIdx)) { realIdx += 5; continue }
-            if (remainingText.startsWith('[/SUB]', realIdx)) { realIdx += 6; continue }
-            if (remainingText.startsWith('[HL]', realIdx)) { realIdx += 4; continue }
-            if (remainingText.startsWith('[/HL]', realIdx)) { realIdx += 5; continue }
-
-            const char = remainingText[realIdx]
-            const charLen = char.charCodeAt(0) > 255 ? 1 : 0.55
-            
-            if (currentVisualLen + charLen > maxVisualCapacity) break
-            currentVisualLen += charLen
-            realIdx++
-          }
-
-          cutIdx = realIdx
-          if (cutIdx === 0) {
-            if (currentLines > 0) { startNewPage(); continue } else { cutIdx = 1 }
-          }
-
-          const sub = remainingText.slice(0, cutIdx)
-          const openSub = (sub.match(/\[SUB\]/g) || []).length
-          const closeSub = (sub.match(/\[\/SUB\]/g) || []).length
-          if (openSub > closeSub) {
-            const lastOpen = sub.lastIndexOf('[SUB]')
-            if (lastOpen > 0) cutIdx = lastOpen
-          }
-
-          const openHl = (sub.match(/\[HL\]/g) || []).length
-          const closeHl = (sub.match(/\[\/HL\]/g) || []).length
-          if (openHl > closeHl) {
-            const lastOpen = sub.lastIndexOf('[HL]')
-            if (lastOpen > 0) cutIdx = lastOpen
-          }
-
-          const partToFit = remainingText.slice(0, cutIdx)
-          if (partToFit.trim()) {
-            currentBlocks.push({ type: 'text', content: partToFit })
-          }
-          
-          remainingText = remainingText.slice(cutIdx)
-          startNewPage()
-        }
+      const linesNeeded = Math.max(1, Math.ceil(para.length / charsPerLine))
+      if (currentLines + linesNeeded > maxLines && currentChunk !== "") {
+        pushNewPage()
+        currentChunk = para + '\n\n'
+        currentLines = linesNeeded + 1
+      } else {
+        currentChunk += para + '\n\n'
+        currentLines += linesNeeded + 1
       }
     })
-
-    startNewPage()
-    return pages
+    
+    pushNewPage()
+    return result
   }, [editorialText, edRatio, edSizeLabel, activeImages, mounted])
 
-  const renderRichText = (content: string) => {
-    const parts = content.split(/(\[SUB\].*?\[\/SUB\]|\[HL\].*?\[\/HL\])/g)
-    
-    return parts.map((part, i) => {
-      if (part.startsWith('[SUB]') && part.endsWith('[/SUB]')) {
-        const innerText = part.slice(5, -6)
-        return (
-          <div 
-            key={i} 
-            className="block font-serif font-bold tracking-wider"
-            style={{ 
-              fontSize: '1.25em', 
-              marginTop: '1.5em', 
-              marginBottom: '0.8em',
-              color: `rgb(${textR}, ${textG}, ${textB})`
-            }}
-          >
-            {innerText}
-          </div>
-        )
-      }
-      
-      if (part.startsWith('[HL]') && part.endsWith('[/HL]')) {
-        const innerText = part.slice(4, -5)
-        return (
-          <span 
-            key={i} 
-            className="px-1 mx-[1px] rounded-sm transition-colors"
-            style={{ 
-              backgroundColor: 'rgba(128, 128, 128, 0.18)', 
-            }}
-          >
-            {innerText}
-          </span>
-        )
-      }
-
-      return <span key={i}>{part}</span>
-    })
-  }
-
-  const handleSelection = () => {
-    const selection = window.getSelection()
-    const text = selection?.toString().trim()
-    
-    if (text && text.length > 0 && !text.includes('\n')) {
-      const range = selection!.getRangeAt(0)
-      const rect = range.getBoundingClientRect()
-      
-      setTooltip({
-        show: true,
-        text,
-        x: rect.left + rect.width / 2,
-        y: rect.top - 50
-      })
-    } else {
-      setTooltip({ show: false, text: '', x: 0, y: 0 })
-    }
-  }
-
-  const applyFormat = (type: 'sub' | 'hl') => {
-    if (tooltip.text) {
-      const safeText = tooltip.text.replace(/\[\/?(SUB|HL)\]/g, '')
-      const tag = type === 'sub' ? 'SUB' : 'HL'
-      
-      setEditorialText((prev) => prev.replace(tooltip.text, `[${tag}]${safeText}[/${tag}]`))
-      setTooltip({ show: false, text: '', x: 0, y: 0 })
-      window.getSelection()?.removeAllRanges()
-    }
-  }
-
   const handleEdCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader()
-      reader.onload = () => setEdCoverImage(reader.result as string)
-      reader.readAsDataURL(e.target.files[0])
-    }
+    if (e.target.files && e.target.files[0]) setEdCoverImage(URL.createObjectURL(e.target.files[0]))
   }
 
   const handleEdLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader()
-      reader.onload = () => setEdLogo(reader.result as string)
-      reader.readAsDataURL(e.target.files[0])
-    }
+    if (e.target.files && e.target.files[0]) setEdLogo(URL.createObjectURL(e.target.files[0]))
   }
 
   const handleBodyImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader()
-      reader.onload = () => setBodyImages(prev => [...prev, { url: reader.result as string, checked: true }])
-      reader.readAsDataURL(e.target.files[0])
+      setBodyImages(prev => [...prev, { url: URL.createObjectURL(e.target.files![0]), checked: true }])
     }
   }
+
+  // ----------------------------------------------------------------------
+  // 核心渲染模块：剥离出来供「UI预览」和「隐藏导出节点」双重使用
+  // ----------------------------------------------------------------------
+  const computedTextColor = `rgb(${textR}, ${textG}, ${textB})`
+  const getFontFamilyStyle = (f: 'sans' | 'serif') => f === 'serif' ? '"Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif' : STRICT_SANS_SERIF
+
+  const renderCover = (isExport: boolean) => (
+    <div 
+      id={isExport ? "export-ed-cover" : "ed-cover"} 
+      className="flex flex-col relative bg-white" 
+      style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', backgroundColor: edBgColor, fontFamily: getFontFamilyStyle(edFontFamily) }}
+    >
+      <div className="relative overflow-hidden shrink-0 bg-zinc-200/60" style={{ height: `${edCoverWeight}%` }}>
+        {edCoverImage ? (
+          <>
+            <img src={edCoverImage} className="w-full h-full object-cover" alt="Cover" />
+            <div className="absolute inset-0 bg-black pointer-events-none transition-opacity" style={{ opacity: coverMaskOpacity / 100 }} />
+          </>
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 font-mono text-[11px] uppercase tracking-widest gap-1"><span>[ NO COVER IMAGE LOADED ]</span></div>
+        )}
+        
+        {edCoverWeight >= 75 && (
+          <div className="absolute bottom-16 left-16 right-16 text-white flex flex-col justify-between">
+            <div>
+              <p className="text-[16px] font-mono font-bold tracking-widest mb-4 opacity-70 uppercase">{edCoverSubtitle}</p>
+              <h1 className="text-[56px] font-extrabold leading-[1.0] uppercase tracking-tighter drop-shadow-sm mb-8">{edTitle}</h1>
+            </div>
+            <div className="border-t border-white/30 pt-6 flex justify-between items-end tracking-wide">
+              <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                {edLogo && <img src={edLogo} className="h-10 max-w-[120px] object-contain invert" alt="Logo" />}
+                <span className="truncate">{edStudioName}</span>
+              </div>
+              <div className="text-right text-[14px] font-medium opacity-90" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {edCoverWeight < 75 && (
+        <div className="flex-1 p-16 flex flex-col justify-between" style={{ color: computedTextColor }}>
+          <div>
+            <p className="text-[18px] font-mono font-bold tracking-widest mb-4 opacity-50 uppercase">{edCoverSubtitle}</p>
+            <h1 className="text-[64px] font-extrabold leading-[1.0] uppercase tracking-tighter">{edTitle}</h1>
+          </div>
+          
+          <div className="border-t pt-6 flex justify-between items-end tracking-wide" style={{ borderColor: `${computedTextColor}22` }}>
+            <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
+              {edLogo && <img src={edLogo} className="h-10 max-w-[130px] object-contain" alt="Logo" />}
+              <span className="truncate">{edStudioName}</span>
+            </div>
+            <div className="text-right text-[14px] font-medium opacity-85" style={{ fontFamily: STRICT_SANS_SERIF }}>
+              本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const renderPage = (blocks: ContentBlock[], index: number, isExport: boolean) => (
+    <div 
+      id={isExport ? `export-ed-page-${index}` : `ed-page-${index}`} 
+      className="flex flex-col justify-between relative bg-white" 
+      style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', backgroundColor: edBgColor, color: computedTextColor, padding: `${ADVANCED_PADDING_Y}px ${ADVANCED_PADDING_X}px`, fontFamily: getFontFamilyStyle(edFontFamily) }}
+    >
+      <div className="flex justify-between items-center border-b pb-4 tracking-widest opacity-40 uppercase shrink-0" style={{ borderColor: `${computedTextColor}22`, fontFamily: STRICT_SANS_SERIF }}>
+        <div className="flex items-center gap-3">
+          {(edDisplayMode === 'logo') && edLogo ? (
+            <img src={edLogo} className="h-10 max-w-[150px] object-contain" alt="Header Logo" />
+          ) : null}
+          {(edDisplayMode === 'text' || (!edLogo && edDisplayMode === 'logo')) && (
+            <span className="text-[14px] font-bold">{edStudioName}</span>
+          )}
+        </div>
+        <span className="text-[14px] font-bold">{String(index + 1).padStart(2, '0')}</span>
+      </div>
+      
+      <div className="flex-1 py-6 text-justify overflow-hidden tracking-wide flex flex-col justify-start" style={{ fontSize: `${FONT_SIZE_MAP[edSizeLabel]}px`, lineHeight: ADVANCED_LINE_HEIGHT }}>
+        <div className="space-y-4">
+          {blocks.map((block, bIdx) => {
+            if (block.type === 'text') {
+              return <div key={bIdx} className="whitespace-pre-wrap">{block.content}</div>
+            } else {
+              const imgSrc = activeImages[block.index]?.url
+              const targetHeight = IMG_GRID_LINES * FONT_SIZE_MAP[edSizeLabel] * ADVANCED_LINE_HEIGHT
+              const bottomMargin = FONT_SIZE_MAP[edSizeLabel] * ADVANCED_LINE_HEIGHT
+
+              return (
+                <div key={bIdx} className="w-full relative overflow-hidden bg-zinc-200/40 rounded shadow-sm" style={{ height: targetHeight, marginBottom: bottomMargin }}>
+                  {imgSrc ? (
+                    <img src={imgSrc} className="w-full h-full object-cover" alt="Editorial Body" />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-[11px] font-mono tracking-widest text-zinc-500 border border-dashed border-zinc-400">
+                      [ MISSING ACTIVE IMAGE ASSET ]
+                    </div>
+                  )}
+                </div>
+              )
+            }
+          })}
+        </div>
+      </div>
+      
+      <div className="flex justify-between items-center tracking-widest opacity-30 uppercase pt-4 shrink-0" style={{ fontFamily: STRICT_SANS_SERIF }}>
+        <div className="flex items-center gap-2">
+          {(edDisplayMode === 'logo') && edLogo ? (
+            <img src={edLogo} className="h-7 max-w-[100px] object-contain opacity-80" alt="Footer Logo" />
+          ) : null}
+        </div>
+        <span className="text-[11px] font-bold">EDITION 2026</span>
+      </div>
+    </div>
+  )
 
   const exportAsImage = async (id: string, name: string) => {
     const node = document.getElementById(id)
     if (!node) return
-    const images = Array.from(node.querySelectorAll('img'))
-    await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise(resolve => { img.onload = resolve; img.onerror = resolve })))
-
+    const targetHeight = edRatio === '3:4' ? 960 : 1280
+    // 直接截取隐藏的纯净原始DOM，规避任何缩放污染
     const dataUrl = await toPng(node, { 
       quality: 1, 
       pixelRatio: 2.5,
-      backgroundColor: edBgColor 
+      backgroundColor: edBgColor,
+      width: 720,
+      height: targetHeight,
+      style: { margin: '0' }
     })
     const link = document.createElement('a')
     link.download = `${name}.png`
@@ -319,10 +289,11 @@ export default function EditorialEditorV7() {
   const exportAllPages = async () => {
     setIsExporting(true)
     try {
-      await exportAsImage('ed-cover', `${edStudioName.replace(/ /g, '_')}-00-Cover`)
+      // 统一指向 hidden 里的 export- 前缀节点
+      await exportAsImage('export-ed-cover', `${edStudioName.replace(/ /g, '_')}-00-Cover`)
       await new Promise(res => setTimeout(res, 600)) 
       for (let i = 0; i < editorialPages.length; i++) {
-        await exportAsImage(`ed-page-${i}`, `${edStudioName.replace(/ /g, '_')}-Page-${String(i + 1).padStart(2, '0')}`)
+        await exportAsImage(`export-ed-page-${i}`, `${edStudioName.replace(/ /g, '_')}-Page-${String(i + 1).padStart(2, '0')}`)
         await new Promise(res => setTimeout(res, 600))
       }
     } catch (err) {
@@ -332,41 +303,13 @@ export default function EditorialEditorV7() {
     }
   }
 
-  const getFontFamilyStyle = (f: 'sans' | 'serif') => {
-    if (f === 'serif') return '"Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif'
-    return STRICT_SANS_SERIF
-  }
-
-  const computedTextColor = `rgb(${textR}, ${textG}, ${textB})`
-
   if (!mounted) return null
 
   return (
     <main className="min-h-screen bg-[#F0F0F0] flex flex-col lg:flex-row text-zinc-900 font-sans relative">
       
-      {tooltip.show && (
-        <div
-          className="fixed z-50 bg-white text-black text-[12px] font-black p-1 rounded-lg shadow-2xl cursor-pointer transform -translate-x-1/2 flex items-center gap-1 border border-black/10"
-          style={{ left: tooltip.x, top: tooltip.y }}
-        >
-          <button 
-            onClick={() => applyFormat('sub')} 
-            className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5"
-          >
-            <span className="text-[14px]">T</span> 设为小标题
-          </button>
-          <div className="w-[1px] h-4 bg-gray-200 mx-1"></div>
-          <button 
-            onClick={() => applyFormat('hl')} 
-            className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5"
-          >
-            <span className="text-[14px]">🖍️</span> 重点划线
-          </button>
-        </div>
-      )}
-
       {isExporting && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center text-white">
           <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mb-6"></div>
           <h2 className="text-xl font-black tracking-widest uppercase mb-2">正在一键压制全册文件...</h2>
           <p className="text-xs font-mono opacity-50">Please do not close this window.</p>
@@ -465,9 +408,9 @@ export default function EditorialEditorV7() {
             <div className="space-y-1.5">
               <label className="text-[10px] uppercase font-black opacity-40 tracking-wider">正文字号控制</label>
               <div className="grid grid-cols-3 gap-2">
-                {(['S', 'M', 'L', 'XL'] as const).map(size => (
+                {(['small', 'medium', 'large'] as const).map(size => (
                   <button key={size} onClick={() => setEdSizeLabel(size)} className={`py-2 text-xs border rounded-lg font-bold transition-all ${edSizeLabel === size ? 'border-black bg-black text-white font-black' : 'border-zinc-200'}`}>
-                    {size}
+                    {size === 'small' ? '小 (18px)' : size === 'medium' ? '中 (22px)' : '大 (25px)'}
                   </button>
                 ))}
               </div>
@@ -500,7 +443,7 @@ export default function EditorialEditorV7() {
                 <div className="grid grid-cols-4 gap-2">
                   {bodyImages.map((imgObj, idx) => (
                     <div key={idx} className="relative aspect-square bg-zinc-200 rounded-lg overflow-hidden border border-zinc-300 group/img shadow-sm">
-                      <img crossOrigin="anonymous" src={imgObj.url} className={`w-full h-full object-cover transition-all ${!imgObj.checked ? 'opacity-30 grayscale scale-95' : ''}`} alt="body asset" />
+                      <img src={imgObj.url} className={`w-full h-full object-cover transition-all ${!imgObj.checked ? 'opacity-30 grayscale scale-95' : ''}`} alt="body asset" />
                       <div className="absolute bottom-1 left-1 bg-black/70 rounded p-1 flex items-center justify-center backdrop-blur-sm z-10 border border-white/20">
                         <input 
                           type="checkbox" 
@@ -529,123 +472,36 @@ export default function EditorialEditorV7() {
         </div>
       </aside>
 
-      <section 
-        className="flex-1 h-screen overflow-y-auto p-8 lg:p-16 bg-[#E8E8E8] flex flex-col items-center gap-16 pb-44"
-        onMouseUp={handleSelection}
-      >
+      {/* ========================================== */}
+      {/* 视觉预览区：仅用于显示，用户看这里 */}
+      {/* ========================================== */}
+      <section className="flex-1 h-screen overflow-y-auto p-8 lg:p-16 bg-[#E8E8E8] flex flex-col items-center gap-16 pb-44">
         <div className="w-full flex flex-col items-center gap-20">
           
+          {/* 预览封面 */}
           <div className="flex flex-col items-center gap-4 group">
             <div className="flex items-center justify-between w-[360px]">
               <span className="text-[10px] font-black opacity-40 tracking-widest uppercase">PAGE 00 // COVER PAGE</span>
-              <button onClick={() => exportAsImage('ed-cover', 'Editorial-Cover-Pro')} className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold bg-black text-white px-2 py-1 rounded">导出此页</button>
+              {/* 指向隐藏渲染树中的 ID */}
+              <button onClick={() => exportAsImage('export-ed-cover', 'Editorial-Cover-Pro')} className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold bg-black text-white px-2 py-1 rounded">导出此页</button>
             </div>
-            
             <div className="bg-white shadow-2xl relative overflow-hidden transition-transform duration-300 group-hover:shadow-3xl" style={{ width: '360px', height: edRatio === '3:4' ? '480px' : '640px' }}>
-              <div id="ed-cover" className="absolute inset-0 flex flex-col" style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left', backgroundColor: edBgColor, fontFamily: getFontFamilyStyle(edFontFamily) }}>
-                
-                <div className="relative overflow-hidden shrink-0 bg-zinc-200/60" style={{ height: `${edCoverWeight}%` }}>
-                  {edCoverImage ? (
-                    <>
-                      <img crossOrigin="anonymous" src={edCoverImage} className="w-full h-full object-cover" alt="Cover" />
-                      <div className="absolute inset-0 bg-black pointer-events-none transition-opacity" style={{ opacity: coverMaskOpacity / 100 }} />
-                    </>
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 font-mono text-[11px] uppercase tracking-widest gap-1"><span>[ NO COVER IMAGE LOADED ]</span></div>
-                  )}
-                  
-                  {edCoverWeight >= 75 && (
-                    <div className="absolute bottom-16 left-16 right-16 text-white flex flex-col justify-between">
-                      <div>
-                        <p className="font-serif font-medium text-[18px] tracking-[0.18em] mb-4 opacity-75">{edCoverSubtitle}</p>
-                        <h1 className="text-[56px] font-extrabold leading-[1.05] tracking-tighter drop-shadow-sm mb-8">{edTitle}</h1>
-                      </div>
-                      <div className="border-t border-white/30 pt-6 flex justify-between items-end tracking-wide">
-                        <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                          <span className="truncate">{edStudioName}</span>
-                        </div>
-                        <div className="text-right text-[16px] font-medium opacity-95 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                          本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                
-                {edCoverWeight < 75 && (
-                  <div className="flex-1 p-16 flex flex-col justify-between" style={{ color: computedTextColor }}>
-                    <div>
-                      <p className="font-serif font-medium text-[18px] tracking-[0.18em] mb-4 opacity-75">{edCoverSubtitle}</p>
-                      <h1 className="text-[64px] font-extrabold leading-[1.05] tracking-tighter">{edTitle}</h1>
-                    </div>
-                    
-                    <div className="border-t pt-6 flex justify-between items-end tracking-wide" style={{ borderColor: `${computedTextColor}22` }}>
-                      <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                        <span className="truncate">{edStudioName}</span>
-                      </div>
-                      <div className="text-right text-[16px] font-medium opacity-90 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                        本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <div style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left' }}>
+                {renderCover(false)}
               </div>
             </div>
           </div>
 
+          {/* 预览正文分页 */}
           {editorialPages.map((blocks, index) => (
             <div key={index} className="flex flex-col items-center gap-4 group">
               <div className="flex items-center justify-between w-[360px]">
                 <span className="text-[10px] font-black opacity-40 tracking-widest uppercase">PAGE {String(index + 1).padStart(2, '0')} // BODY</span>
-                <button onClick={() => exportAsImage(`ed-page-${index}`, `Editorial-Page-${index + 1}`)} className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold bg-black text-white px-2 py-1 rounded">导出此页</button>
+                <button onClick={() => exportAsImage(`export-ed-page-${index}`, `Editorial-Page-${index + 1}`)} className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold bg-black text-white px-2 py-1 rounded">导出此页</button>
               </div>
-              
               <div className="bg-white shadow-xl relative overflow-hidden transition-all duration-300 group-hover:shadow-2xl" style={{ width: '360px', height: edRatio === '3:4' ? '480px' : '640px' }}>
-                
-                <div id={`ed-page-${index}`} className="absolute inset-0 flex flex-col justify-between" style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left', backgroundColor: edBgColor, color: computedTextColor, padding: `${ADVANCED_PADDING_Y}px ${ADVANCED_PADDING_X}px`, fontFamily: getFontFamilyStyle(edFontFamily) }}>
-                  
-                  <div className="flex justify-between items-center border-b pb-4 tracking-widest opacity-40 uppercase shrink-0" style={{ borderColor: `${computedTextColor}22`, fontFamily: STRICT_SANS_SERIF }}>
-                    <div className="flex items-center gap-3">
-                      {(edDisplayMode === 'logo') && edLogo ? (
-                        <img crossOrigin="anonymous" src={edLogo} className="h-10 max-w-[150px] object-contain" alt="Header Logo" />
-                      ) : null}
-                      {(edDisplayMode === 'text' || (!edLogo && edDisplayMode === 'logo')) && (
-                        <span className="text-[14px] font-bold">{edStudioName}</span>
-                      )}
-                    </div>
-                    <span className="text-[14px] font-bold">{String(index + 1).padStart(2, '0')}</span>
-                  </div>
-                  
-                  <div className="flex-1 py-6 text-justify overflow-hidden tracking-wide flex flex-col justify-start" style={{ fontSize: `${FONT_SIZE_MAP[edSizeLabel]}px`, lineHeight: ADVANCED_LINE_HEIGHT }}>
-                    <div className="space-y-4">
-                      {blocks.map((block, bIdx) => {
-                        if (block.type === 'text') {
-                          return <div key={bIdx} className="whitespace-pre-wrap">{renderRichText(block.content)}</div>
-                        } else {
-                          const imgSrc = activeImages[block.index]?.url
-                          const targetHeight = IMG_GRID_LINES * FONT_SIZE_MAP[edSizeLabel] * ADVANCED_LINE_HEIGHT
-                          const bottomMargin = FONT_SIZE_MAP[edSizeLabel] * ADVANCED_LINE_HEIGHT
-
-                          return (
-                            <div key={bIdx} className="w-full relative overflow-hidden bg-zinc-200/40 rounded shadow-sm" style={{ height: targetHeight, marginBottom: bottomMargin }}>
-                              {imgSrc ? (
-                                <img crossOrigin="anonymous" src={imgSrc} className="w-full h-full object-cover" alt="Editorial Body" />
-                              ) : (
-                                <div className="absolute inset-0 flex items-center justify-center text-[11px] font-mono tracking-widest text-zinc-500 border border-dashed border-zinc-400">
-                                  [ MISSING ACTIVE IMAGE ASSET ]
-                                </div>
-                              )}
-                            </div>
-                          )
-                        }
-                      })}
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-end items-center tracking-widest opacity-30 uppercase pt-4 shrink-0" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                    <span className="text-[11px] font-bold">EDITION 2026</span>
-                  </div>
-
+                <div style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left' }}>
+                  {renderPage(blocks, index, false)}
                 </div>
               </div>
             </div>
@@ -653,6 +509,19 @@ export default function EditorialEditorV7() {
 
         </div>
       </section>
+
+      {/* ========================================== */}
+      {/* 幽灵导出区：真实 1:1 比例，规避一切缩放 Bug */}
+      {/* ========================================== */}
+      <div className="fixed pointer-events-none" style={{ top: '-9999px', left: '-9999px' }}>
+        {renderCover(true)}
+        {editorialPages.map((blocks, index) => (
+          <React.Fragment key={`export-${index}`}>
+            {renderPage(blocks, index, true)}
+          </React.Fragment>
+        ))}
+      </div>
+
     </main>
   )
 }
