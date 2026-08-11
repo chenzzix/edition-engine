@@ -305,11 +305,25 @@ export default function EditorialEditorV7() {
     const images = Array.from(node.querySelectorAll('img'))
     await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise(resolve => { img.onload = resolve; img.onerror = resolve })))
 
-    const dataUrl = await toPng(node, { 
-      quality: 1, 
-      pixelRatio: 2.5,
-      backgroundColor: edBgColor 
-    })
+    // The editor preview scales the full-size page down to 50%. `html-to-image`
+    // otherwise retains that transform while creating a 720px-wide export canvas,
+    // which leaves most of the exported image blank.
+    const originalTransform = node.style.transform
+    node.style.transform = 'none'
+
+    let dataUrl: string
+    try {
+      dataUrl = await toPng(node, {
+        quality: 1,
+        pixelRatio: 2.5,
+        width: node.offsetWidth,
+        height: node.offsetHeight,
+        backgroundColor: edBgColor,
+      })
+    } finally {
+      node.style.transform = originalTransform
+    }
+
     const link = document.createElement('a')
     link.download = `${name}.png`
     link.href = dataUrl
@@ -596,7 +610,7 @@ export default function EditorialEditorV7() {
           {editorialPages.map((blocks, index) => (
             <div key={index} className="flex flex-col items-center gap-4 group">
               <div className="flex items-center justify-between w-[360px]">
-                <span className="text-[10px] font-black opacity-40 tracking-widest uppercase">PAGE {String(index + 1).padStart(2, '0')} // BODY</span>
+                <span className="text-[10px] font-black opacity-40 tracking-widest uppercase">PAGE {String(index + 1).padStart(2, '0')} — BODY</span>
                 <button onClick={() => exportAsImage(`ed-page-${index}`, `Editorial-Page-${index + 1}`)} className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold bg-black text-white px-2 py-1 rounded">导出此页</button>
               </div>
               
