@@ -384,6 +384,15 @@ export default function EditorialEditorV7() {
     setEditorialText(previous => previous.replace(/\n[ \t]*\n/, '\n'))
   }
 
+  const removeBodyImage = (id: string) => {
+    setBodyImages(previous => previous.filter(image => image.id !== id))
+    setEditorialText(previous => previous
+      .replace(`\n\n[IMG:${id}]`, '')
+      .replace(`[IMG:${id}]\n\n`, '')
+      .replace(`[IMG:${id}]`, '')
+    )
+  }
+
   const exportAsImage = async (id: string, name: string) => {
     const node = document.getElementById(id)
     if (!node) return
@@ -404,6 +413,7 @@ export default function EditorialEditorV7() {
         width: node.offsetWidth,
         height: node.offsetHeight,
         backgroundColor: edBgColor,
+        filter: element => !(element instanceof HTMLElement && element.dataset.exportIgnore === 'true'),
       })
     } finally {
       node.style.transform = originalTransform
@@ -600,7 +610,7 @@ export default function EditorialEditorV7() {
         onMouseUp={handleSelection}
       >
         <div className="w-full flex flex-col items-center gap-20">
-          <div className="w-[360px] flex items-center justify-between rounded-lg border border-zinc-300 bg-white/80 px-3 py-2 text-[10px] font-bold text-zinc-500 shadow-sm">
+          <div className="sticky top-6 z-30 w-[360px] flex items-center justify-between rounded-lg border border-zinc-300 bg-white/95 px-3 py-2 text-[10px] font-bold text-zinc-500 shadow-lg backdrop-blur">
             <span>{activeEditingBlock ? '图片将插入当前正文位置' : '点击正文后可在当前位置插入图片'}</span>
             <label className="cursor-pointer rounded bg-black px-2 py-1 text-white transition-colors hover:bg-zinc-700">
               + 添加图片
@@ -754,9 +764,19 @@ export default function EditorialEditorV7() {
                           const bottomMargin = FONT_SIZE_MAP[edSizeLabel] * ADVANCED_LINE_HEIGHT
 
                           return (
-                            <div key={bIdx} className="w-full relative overflow-hidden bg-zinc-200/40 rounded shadow-sm" style={{ height: targetHeight, marginBottom: bottomMargin }}>
+                            <div key={bIdx} className="group/image w-full relative overflow-hidden bg-zinc-200/40 rounded shadow-sm" style={{ height: targetHeight, marginBottom: bottomMargin }}>
                               {imgSrc ? (
-                                <img crossOrigin="anonymous" src={imgSrc} className="w-full h-full object-cover" alt="Editorial Body" />
+                                <>
+                                  <img crossOrigin="anonymous" src={imgSrc} className="w-full h-full object-cover" alt="Editorial Body" />
+                                  <button
+                                    type="button"
+                                    data-export-ignore="true"
+                                    onClick={() => removeBodyImage(activeImages[block.index].id)}
+                                    className="absolute right-3 top-3 rounded bg-black/75 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition-opacity hover:bg-red-600 group-hover/image:opacity-100"
+                                  >
+                                    删除图片
+                                  </button>
+                                </>
                               ) : (
                                 <div className="absolute inset-0 flex items-center justify-center text-[11px] font-mono tracking-widest text-zinc-500 border border-dashed border-zinc-400">
                                   [ MISSING ACTIVE IMAGE ASSET ]
