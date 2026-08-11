@@ -4,8 +4,11 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { toPng } from 'html-to-image'
 
 const ADVANCED_LINE_HEIGHT = 1.95
-const ADVANCED_PADDING_X = 64
-const ADVANCED_PADDING_Y = 56
+const ADVANCED_PADDING_X = 72
+const ADVANCED_PADDING_TOP = 72
+const ADVANCED_PADDING_BOTTOM = 84
+const HEADER_FOOTER_RESERVE = 118
+const BODY_SAFETY_SPACE = 40
 const IMG_GRID_LINES = 12
 
 const STRICT_SANS_SERIF = 'system-ui, -apple-system, "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif'
@@ -65,6 +68,7 @@ export default function EditorialEditorV7() {
   const [textB, setTextB] = useState(28)
 
   const [isExporting, setIsExporting] = useState(false)
+  const [activeEditingBlock, setActiveEditingBlock] = useState<string | null>(null)
   
   const [tooltip, setTooltip] = useState({ show: false, text: '', x: 0, y: 0 })
 
@@ -90,7 +94,11 @@ export default function EditorialEditorV7() {
 
     const canvasHeight = edRatio === '3:4' ? 960 : 1280
     const headerFooterOverhead = 90
-    const availableHeight = canvasHeight - ADVANCED_PADDING_Y * 2 - headerFooterOverhead
+    const availableHeight = canvasHeight
+      - ADVANCED_PADDING_TOP
+      - ADVANCED_PADDING_BOTTOM
+      - Math.max(headerFooterOverhead, HEADER_FOOTER_RESERVE)
+      - BODY_SAFETY_SPACE
     const maxLinesPerPage = availableHeight / (currentFontSize * ADVANCED_LINE_HEIGHT)
 
     const paragraphs = editorialText.split('\n')
@@ -322,7 +330,7 @@ export default function EditorialEditorV7() {
   }
 
   const handleBodyImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) addBodyImage(e.target.files[0])
+    if (e.target.files?.[0]) addBodyImage(e.target.files[0], activeEditingBlock ?? undefined)
     e.target.value = ''
   }
 
@@ -593,7 +601,7 @@ export default function EditorialEditorV7() {
       >
         <div className="w-full flex flex-col items-center gap-20">
           <div className="w-[360px] flex items-center justify-between rounded-lg border border-zinc-300 bg-white/80 px-3 py-2 text-[10px] font-bold text-zinc-500 shadow-sm">
-            <span>点击正文直接编辑；可粘贴文字或图片</span>
+            <span>{activeEditingBlock ? '图片将插入当前正文位置' : '点击正文后可在当前位置插入图片'}</span>
             <label className="cursor-pointer rounded bg-black px-2 py-1 text-white transition-colors hover:bg-zinc-700">
               + 添加图片
               <input type="file" accept="image/*" onChange={handleBodyImageUpload} className="hidden" />
@@ -703,7 +711,7 @@ export default function EditorialEditorV7() {
               
               <div className="bg-white shadow-xl relative overflow-hidden transition-all duration-300 group-hover:shadow-2xl" style={{ width: '360px', height: edRatio === '3:4' ? '480px' : '640px' }}>
                 
-                <div id={`ed-page-${index}`} className="absolute inset-0 flex flex-col justify-between" style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left', backgroundColor: edBgColor, color: computedTextColor, padding: `${ADVANCED_PADDING_Y}px ${ADVANCED_PADDING_X}px`, fontFamily: getFontFamilyStyle(edFontFamily) }}>
+                <div id={`ed-page-${index}`} className="absolute inset-0 flex flex-col justify-between" style={{ width: '720px', height: edRatio === '3:4' ? '960px' : '1280px', transform: 'scale(0.5)', transformOrigin: 'top left', backgroundColor: edBgColor, color: computedTextColor, padding: `${ADVANCED_PADDING_TOP}px ${ADVANCED_PADDING_X}px ${ADVANCED_PADDING_BOTTOM}px`, fontFamily: getFontFamilyStyle(edFontFamily) }}>
                   
                   <div className="flex justify-between items-center border-b pb-4 tracking-widest opacity-40 uppercase shrink-0" style={{ borderColor: `${computedTextColor}22`, fontFamily: STRICT_SANS_SERIF }}>
                     <div className="flex items-center gap-3">
@@ -726,6 +734,7 @@ export default function EditorialEditorV7() {
                               key={bIdx}
                               contentEditable
                               suppressContentEditableWarning
+                              onFocus={() => setActiveEditingBlock(block.content)}
                               onBlur={event => updateEditorialBlock(block.content, event.currentTarget)}
                               onPaste={event => handleEditablePaste(event, block.content)}
                               onKeyDown={event => {
