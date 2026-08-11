@@ -424,31 +424,33 @@ export default function EditorialEditorV7() {
               <label className="text-[10px] uppercase font-black opacity-50 tracking-wider block border-b pb-1">📇 文本与标志配置</label>
               
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 block">品牌名称</label>
-                <input type="text" value={edStudioName} onChange={e => setEdStudioName(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white focus:border-black outline-none font-mono" placeholder="输入品牌名称" />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 block">正文标识呈现模式</label>
+                <label className="text-[10px] font-bold text-zinc-400 block">品牌标识</label>
                 <div className="grid grid-cols-2 gap-1 bg-zinc-200/60 p-1 rounded-lg">
                   {(['text', 'logo'] as const).map(mode => (
                     <button key={mode} onClick={() => setEdDisplayMode(mode)} className={`py-1 text-[10px] font-bold rounded-md transition-all ${edDisplayMode === mode ? 'bg-white text-black shadow-sm' : 'text-zinc-500 hover:text-black'}`}>
-                      {mode === 'text' ? '仅文字' : '仅 Logo'}
+                      {mode === 'text' ? '文字' : 'Logo'}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-zinc-400 block">标志图像 (Logo Asset)</label>
-                <div className="border border-dashed border-zinc-300 rounded-lg p-3 text-center bg-white hover:bg-zinc-50/50 transition-colors relative cursor-pointer">
-                  <span className="text-[10px] text-zinc-500 block font-bold">
-                    {edLogo ? '✨已加载自定义 Logo (点击更换)' : '➕ 插入自定义 Logo 资产'}
-                  </span>
-                  <input type="file" accept="image/*" onChange={handleEdLogoUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+              {edDisplayMode === 'text' ? (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 block">品牌名称</label>
+                  <input type="text" value={edStudioName} onChange={e => setEdStudioName(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white focus:border-black outline-none font-mono" placeholder="输入品牌名称" />
                 </div>
-                {edLogo && <button onClick={() => setEdLogo('')} className="text-[9px] text-red-500 hover:text-red-700 underline block pt-0.5 transition-colors">移除已加载的 Logo</button>}
-              </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 block">标志图像 (Logo Asset)</label>
+                  <div className="border border-dashed border-zinc-300 rounded-lg p-3 text-center bg-white hover:bg-zinc-50/50 transition-colors relative cursor-pointer">
+                    <span className="text-[10px] text-zinc-500 block font-bold">
+                      {edLogo ? '✨已加载自定义 Logo（点击更换）' : '➕ 插入自定义 Logo'}
+                    </span>
+                    <input type="file" accept="image/*" onChange={handleEdLogoUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                  </div>
+                  {edLogo && <button onClick={() => setEdLogo('')} className="text-[9px] text-red-500 hover:text-red-700 underline block pt-0.5 transition-colors">移除已加载的 Logo</button>}
+                </div>
+              )}
 
               <div className="space-y-1 pt-1 border-t border-zinc-200/60">
                 <label className="text-[10px] font-black text-zinc-500 tracking-wider flex items-center gap-1">
@@ -575,12 +577,23 @@ export default function EditorialEditorV7() {
                         <h1 className="text-[56px] font-extrabold leading-[1.05] tracking-tighter drop-shadow-sm mb-8">{edTitle}</h1>
                       </div>
                       <div className="border-t border-white/30 pt-6 flex justify-between items-end tracking-wide">
-                        <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                          <span className="truncate">{edStudioName}</span>
-                        </div>
-                        <div className="text-right text-[16px] font-medium opacity-95 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                          本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
-                        </div>
+                        {edDisplayMode === 'logo' && edLogo ? (
+                          <>
+                            <div className="text-[16px] font-medium opacity-95 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                              本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
+                            </div>
+                            <img crossOrigin="anonymous" src={edLogo} className="h-10 max-w-[180px] object-contain object-right" alt="Cover Logo" />
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                              {edDisplayMode === 'text' && <span className="truncate">{edStudioName}</span>}
+                            </div>
+                            <div className="text-right text-[16px] font-medium opacity-95 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                              本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
@@ -594,12 +607,23 @@ export default function EditorialEditorV7() {
                     </div>
                     
                     <div className="border-t pt-6 flex justify-between items-end tracking-wide" style={{ borderColor: `${computedTextColor}22` }}>
-                      <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                        <span className="truncate">{edStudioName}</span>
-                      </div>
-                      <div className="text-right text-[16px] font-medium opacity-90 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
-                        本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
-                      </div>
+                      {edDisplayMode === 'logo' && edLogo ? (
+                        <>
+                          <div className="text-[16px] font-medium opacity-90 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                            本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
+                          </div>
+                          <img crossOrigin="anonymous" src={edLogo} className="h-10 max-w-[180px] object-contain object-right" alt="Cover Logo" />
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-3 text-[20px] font-bold" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                            {edDisplayMode === 'text' && <span className="truncate">{edStudioName}</span>}
+                          </div>
+                          <div className="text-right text-[16px] font-medium opacity-90 tracking-widest" style={{ fontFamily: STRICT_SANS_SERIF }}>
+                            本文约 {edStats.charCount} 字，阅读需要 {edStats.readingTime} 分钟
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -623,7 +647,7 @@ export default function EditorialEditorV7() {
                       {(edDisplayMode === 'logo') && edLogo ? (
                         <img crossOrigin="anonymous" src={edLogo} className="h-10 max-w-[150px] object-contain" alt="Header Logo" />
                       ) : null}
-                      {(edDisplayMode === 'text' || (!edLogo && edDisplayMode === 'logo')) && (
+                      {edDisplayMode === 'text' && (
                         <span className="text-[14px] font-bold">{edStudioName}</span>
                       )}
                     </div>
