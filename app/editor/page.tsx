@@ -29,6 +29,12 @@ type ContentBlock =
   | { type: 'text', content: string }
   | { type: 'image', index: number }
 
+type BodyImage = {
+  id: string
+  url: string
+  checked: boolean
+}
+
 export default function EditorialEditorV7() {
   const [mounted, setMounted] = useState(false)
 
@@ -43,7 +49,7 @@ export default function EditorialEditorV7() {
   const [editorialText, setEditorialText] = useState(
     `[SUB]留白不是空无一物，而是视觉的延伸与呼吸的节奏。[/SUB]\n\n在版面中，适当的留白能让核心视觉点更加聚焦。优秀的排版应当像一首诗，行与行之间有恰到好处的停顿。摒弃繁琐的装饰，让文字本身成为设计的主角。\n\n[IMG]\n\n通过精准控制文字的色彩、字体的性格以及纸张的温润底色，我们可以为读者创造沉浸式的、[HL]如同阅读实体纸媒一般的精神体验[/HL]。这正是排版美学的终极意义。`
   )
-  const [bodyImages, setBodyImages] = useState<{ url: string; checked: boolean }[]>([])
+  const [bodyImages, setBodyImages] = useState<BodyImage[]>([])
 
   const [coverMaskOpacity, setCoverMaskOpacity] = useState(0)
 
@@ -111,12 +117,17 @@ export default function EditorialEditorV7() {
     }
 
     paragraphs.forEach((para) => {
-      if (para.trim() === '[IMG]') {
-        if (imageCounter < activeImages.length) {
+      const imageMatch = para.trim().match(/^\[IMG(?::([^\]]+))?\]$/)
+      if (imageMatch) {
+        const imageIndex = imageMatch[1]
+          ? activeImages.findIndex(image => image.id === imageMatch[1])
+          : imageCounter++
+
+        if (imageIndex >= 0 && imageIndex < activeImages.length) {
           if (currentLines + IMG_GRID_LINES > maxLinesPerPage && currentLines > 0) {
             startNewPage()
           }
-          currentBlocks.push({ type: 'image', index: imageCounter++ })
+          currentBlocks.push({ type: 'image', index: imageIndex })
           currentLines += IMG_GRID_LINES + 0.5
         }
         return
@@ -293,12 +304,34 @@ export default function EditorialEditorV7() {
     }
   }
 
-  const handleBodyImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader()
-      reader.onload = () => setBodyImages(prev => [...prev, { url: reader.result as string, checked: true }])
-      reader.readAsDataURL(e.target.files[0])
+  const addBodyImage = (file: File, insertAfter?: string) => {
+    const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      setBodyImages(previous => [...previous, { id, url: reader.result as string, checked: true }])
+      const marker = `[IMG:${id}]`
+      setEditorialText(previous => {
+        if (insertAfter && previous.includes(insertAfter)) {
+          return previous.replace(insertAfter, `${insertAfter}\n\n${marker}`)
+        }
+        return `${previous.trimEnd()}\n\n${marker}`
+      })
     }
+    reader.readAsDataURL(file)
+  }
+
+  const handleBodyImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) addBodyImage(e.target.files[0])
+    e.target.value = ''
+  }
+
+  const handleEditablePaste = (event: React.ClipboardEvent<HTMLDivElement>, blockContent: string) => {
+    const image = Array.from(event.clipboardData.files).find(file => file.type.startsWith('image/'))
+    if (!image) return
+
+    event.preventDefault()
+    addBodyImage(image, blockContent)
   }
 
   const serializeEditableContent = (element: HTMLElement) => {
@@ -550,41 +583,6 @@ export default function EditorialEditorV7() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex justify-between items-end">
-                <label className="text-[10px] uppercase font-black opacity-40 tracking-wider">编辑正文与排版图</label>
-              </div>
-              
-              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl space-y-3">
-                <span className="text-[10px] font-bold text-zinc-500 block">🖼️ 正文插图库 (换行输入 [IMG] 即可插入)</span>
-                <div className="grid grid-cols-4 gap-2">
-                  {bodyImages.map((imgObj, idx) => (
-                    <div key={idx} className="relative aspect-square bg-zinc-200 rounded-lg overflow-hidden border border-zinc-300 group/img shadow-sm">
-                      <img crossOrigin="anonymous" src={imgObj.url} className={`w-full h-full object-cover transition-all ${!imgObj.checked ? 'opacity-30 grayscale scale-95' : ''}`} alt="body asset" />
-                      <div className="absolute bottom-1 left-1 bg-black/70 rounded p-1 flex items-center justify-center backdrop-blur-sm z-10 border border-white/20">
-                        <input 
-                          type="checkbox" 
-                          checked={imgObj.checked} 
-                          onChange={() => {
-                            setBodyImages(prev => prev.map((item, i) => i === idx ? { ...item, checked: !item.checked } : item))
-                          }} 
-                          className="w-3.5 h-3.5 accent-white cursor-pointer rounded"
-                        />
-                      </div>
-                      <button onClick={() => setBodyImages(prev => prev.filter((_, i) => i !== idx))} className="absolute top-0.5 right-0.5 bg-black/60 text-white w-4 h-4 rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity z-10">×</button>
-                    </div>
-                  ))}
-                  <label className="aspect-square border border-dashed border-zinc-300 rounded-lg hover:bg-zinc-100 flex flex-col items-center justify-center cursor-pointer transition-colors">
-                    <span className="text-[18px] text-zinc-400 font-bold">+</span>
-                    <span className="text-[8px] text-zinc-400 scale-90">添加配图</span>
-                    <input type="file" accept="image/*" onChange={handleBodyImageUpload} className="hidden" />
-                  </label>
-                </div>
-              </div>
-
-              <input type="text" value={edTitle} onChange={e => setEdTitle(e.target.value)} placeholder="画册大标题" className="w-full border-b-2 border-zinc-300 focus:border-black py-1 font-bold text-md outline-none transition-colors" />
-              <textarea value={editorialText} onChange={e => setEditorialText(e.target.value)} className="w-full border rounded-xl p-3 h-56 text-xs leading-relaxed font-serif outline-none focus:border-black bg-zinc-50/50" placeholder="在此输入长文章正文内容...\n\n需要插图的地方换行输入 [IMG]" />
-            </div>
           </div>
         </div>
       </aside>
@@ -594,6 +592,13 @@ export default function EditorialEditorV7() {
         onMouseUp={handleSelection}
       >
         <div className="w-full flex flex-col items-center gap-20">
+          <div className="w-[360px] flex items-center justify-between rounded-lg border border-zinc-300 bg-white/80 px-3 py-2 text-[10px] font-bold text-zinc-500 shadow-sm">
+            <span>点击正文直接编辑；可粘贴文字或图片</span>
+            <label className="cursor-pointer rounded bg-black px-2 py-1 text-white transition-colors hover:bg-zinc-700">
+              + 添加图片
+              <input type="file" accept="image/*" onChange={handleBodyImageUpload} className="hidden" />
+            </label>
+          </div>
           
           <div className="flex flex-col items-center gap-4 group">
             <div className="flex items-center justify-between w-[360px]">
@@ -722,6 +727,7 @@ export default function EditorialEditorV7() {
                               contentEditable
                               suppressContentEditableWarning
                               onBlur={event => updateEditorialBlock(block.content, event.currentTarget)}
+                              onPaste={event => handleEditablePaste(event, block.content)}
                               onKeyDown={event => {
                                 if (block.content === ' ' && (event.key === 'Backspace' || event.key === 'Delete')) {
                                   event.preventDefault()
