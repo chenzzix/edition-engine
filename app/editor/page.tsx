@@ -213,6 +213,7 @@ export default function EditorialEditorV7() {
         return (
           <div 
             key={i} 
+            data-editor-format="sub"
             className="block font-serif font-bold tracking-wider"
             style={{ 
               fontSize: '1.25em', 
@@ -231,6 +232,7 @@ export default function EditorialEditorV7() {
         return (
           <span 
             key={i} 
+            data-editor-format="hl"
             className="px-1 mx-[1px] rounded-sm transition-colors"
             style={{ 
               backgroundColor: 'rgba(128, 128, 128, 0.18)', 
@@ -304,11 +306,36 @@ export default function EditorialEditorV7() {
     }
   }
 
-  const updateEditorialBlock = (originalContent: string, nextContent: string) => {
-    const originalVisibleContent = originalContent.replace(/\[\/?(SUB|HL)\]/g, '')
-    const normalizedContent = nextContent.replace(/\u00a0/g, ' ')
+  const serializeEditableContent = (element: HTMLElement) => {
+    const serializeNode = (node: Node): string => {
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+      if (node.nodeType !== Node.ELEMENT_NODE) return ''
 
-    if (normalizedContent !== originalVisibleContent) {
+      const htmlElement = node as HTMLElement
+      if (htmlElement.tagName === 'BR') return '\n'
+
+      const content = Array.from(htmlElement.childNodes).map(serializeNode).join('')
+      const format = htmlElement.dataset.editorFormat
+      if (format === 'sub') return `[SUB]${content}[/SUB]`
+      if (format === 'hl') return `[HL]${content}[/HL]`
+
+      // Browsers create divs when Enter is pressed in a contentEditable area.
+      return htmlElement.tagName === 'DIV' ? `${content}\n` : content
+    }
+
+    return Array.from(element.childNodes).map(serializeNode).join('').replace(/\n$/, '').replace(/\u00a0/g, ' ')
+  }
+
+  const updateEditorialBlock = (originalContent: string, element: HTMLElement) => {
+    const normalizedContent = serializeEditableContent(element)
+    const originalVisibleContent = originalContent.replace(/\[\/?(SUB|HL)\]/g, '')
+
+    if (originalContent === ' ' && !normalizedContent.trim()) {
+      setEditorialText(previous => previous.replace(/\n[ \t]*\n/, '\n'))
+      return
+    }
+
+    if (normalizedContent !== originalContent && normalizedContent !== originalVisibleContent) {
       setEditorialText(previous => previous.replace(originalContent, normalizedContent))
     }
   }
@@ -691,7 +718,7 @@ export default function EditorialEditorV7() {
                               key={bIdx}
                               contentEditable
                               suppressContentEditableWarning
-                              onBlur={event => updateEditorialBlock(block.content, event.currentTarget.innerText)}
+                              onBlur={event => updateEditorialBlock(block.content, event.currentTarget)}
                               className="whitespace-pre-wrap outline-none cursor-text"
                             >
                               {renderRichText(block.content)}
