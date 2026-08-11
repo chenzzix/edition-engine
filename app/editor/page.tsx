@@ -249,11 +249,6 @@ export default function EditorialEditorV7() {
 
   const handleSelection = () => {
     const selection = window.getSelection()
-    const selectionContainer = selection?.anchorNode?.parentElement
-    if (selectionContainer?.closest('[contenteditable="true"]')) {
-      setTooltip({ show: false, text: '', x: 0, y: 0 })
-      return
-    }
     const text = selection?.toString().trim()
     
     if (text && text.length > 0 && !text.includes('\n')) {
@@ -330,14 +325,22 @@ export default function EditorialEditorV7() {
     const normalizedContent = serializeEditableContent(element)
     const originalVisibleContent = originalContent.replace(/\[\/?(SUB|HL)\]/g, '')
 
-    if (originalContent === ' ' && !normalizedContent.trim()) {
-      setEditorialText(previous => previous.replace(/\n[ \t]*\n/, '\n'))
+    if (originalContent === ' ') {
+      if (normalizedContent === ' ') return
+      setEditorialText(previous => previous.replace(
+        /\n[ \t]*\n/,
+        normalizedContent.trim() ? `\n${normalizedContent}\n` : '\n'
+      ))
       return
     }
 
     if (normalizedContent !== originalContent && normalizedContent !== originalVisibleContent) {
       setEditorialText(previous => previous.replace(originalContent, normalizedContent))
     }
+  }
+
+  const removeBlankParagraph = () => {
+    setEditorialText(previous => previous.replace(/\n[ \t]*\n/, '\n'))
   }
 
   const exportAsImage = async (id: string, name: string) => {
@@ -719,7 +722,13 @@ export default function EditorialEditorV7() {
                               contentEditable
                               suppressContentEditableWarning
                               onBlur={event => updateEditorialBlock(block.content, event.currentTarget)}
-                              className="whitespace-pre-wrap outline-none cursor-text"
+                              onKeyDown={event => {
+                                if (block.content === ' ' && (event.key === 'Backspace' || event.key === 'Delete')) {
+                                  event.preventDefault()
+                                  removeBlankParagraph()
+                                }
+                              }}
+                              className={`whitespace-pre-wrap outline-none cursor-text ${block.content === ' ' ? 'min-h-[1.95em]' : ''}`}
                             >
                               {renderRichText(block.content)}
                             </div>
