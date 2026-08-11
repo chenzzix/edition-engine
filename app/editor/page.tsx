@@ -247,6 +247,11 @@ export default function EditorialEditorV7() {
 
   const handleSelection = () => {
     const selection = window.getSelection()
+    const selectionContainer = selection?.anchorNode?.parentElement
+    if (selectionContainer?.closest('[contenteditable="true"]')) {
+      setTooltip({ show: false, text: '', x: 0, y: 0 })
+      return
+    }
     const text = selection?.toString().trim()
     
     if (text && text.length > 0 && !text.includes('\n')) {
@@ -296,6 +301,15 @@ export default function EditorialEditorV7() {
       const reader = new FileReader()
       reader.onload = () => setBodyImages(prev => [...prev, { url: reader.result as string, checked: true }])
       reader.readAsDataURL(e.target.files[0])
+    }
+  }
+
+  const updateEditorialBlock = (originalContent: string, nextContent: string) => {
+    const originalVisibleContent = originalContent.replace(/\[\/?(SUB|HL)\]/g, '')
+    const normalizedContent = nextContent.replace(/\u00a0/g, ' ')
+
+    if (normalizedContent !== originalVisibleContent) {
+      setEditorialText(previous => previous.replace(originalContent, normalizedContent))
     }
   }
 
@@ -574,7 +588,14 @@ export default function EditorialEditorV7() {
                     <div className="absolute bottom-16 left-16 right-16 text-white flex flex-col justify-between">
                       <div>
                         <p className="font-serif font-medium text-[18px] tracking-[0.18em] mb-4 opacity-75">{edCoverSubtitle}</p>
-                        <h1 className="text-[56px] font-extrabold leading-[1.05] tracking-tighter drop-shadow-sm mb-8">{edTitle}</h1>
+                        <h1
+                          contentEditable
+                          suppressContentEditableWarning
+                          onBlur={event => setEdTitle(event.currentTarget.innerText)}
+                          className="text-[56px] font-extrabold leading-[1.05] tracking-tighter drop-shadow-sm mb-8 outline-none cursor-text"
+                        >
+                          {edTitle}
+                        </h1>
                       </div>
                       <div className="border-t border-white/30 pt-6 flex justify-between items-end tracking-wide">
                         {edDisplayMode === 'logo' && edLogo ? (
@@ -603,7 +624,14 @@ export default function EditorialEditorV7() {
                   <div className="flex-1 p-16 flex flex-col justify-between" style={{ color: computedTextColor }}>
                     <div>
                       <p className="font-serif font-medium text-[18px] tracking-[0.18em] mb-4 opacity-75">{edCoverSubtitle}</p>
-                      <h1 className="text-[64px] font-extrabold leading-[1.05] tracking-tighter">{edTitle}</h1>
+                      <h1
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={event => setEdTitle(event.currentTarget.innerText)}
+                        className="text-[64px] font-extrabold leading-[1.05] tracking-tighter outline-none cursor-text"
+                      >
+                        {edTitle}
+                      </h1>
                     </div>
                     
                     <div className="border-t pt-6 flex justify-between items-end tracking-wide" style={{ borderColor: `${computedTextColor}22` }}>
@@ -658,7 +686,17 @@ export default function EditorialEditorV7() {
                     <div className="space-y-4">
                       {blocks.map((block, bIdx) => {
                         if (block.type === 'text') {
-                          return <div key={bIdx} className="whitespace-pre-wrap">{renderRichText(block.content)}</div>
+                          return (
+                            <div
+                              key={bIdx}
+                              contentEditable
+                              suppressContentEditableWarning
+                              onBlur={event => updateEditorialBlock(block.content, event.currentTarget.innerText)}
+                              className="whitespace-pre-wrap outline-none cursor-text"
+                            >
+                              {renderRichText(block.content)}
+                            </div>
+                          )
                         } else {
                           const imgSrc = activeImages[block.index]?.url
                           const targetHeight = IMG_GRID_LINES * FONT_SIZE_MAP[edSizeLabel] * ADVANCED_LINE_HEIGHT
