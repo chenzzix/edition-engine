@@ -79,7 +79,7 @@ export default function EditorialEditorV7() {
   const edStats = useMemo(() => {
     const cleanText = editorialText
       .replace(/\[IMG\]/g, '')
-      .replace(/\[\/?(SUB|HL)\]/g, '')
+      .replace(/\[\/?(SUB|HL|CENTER|RIGHT)\]/g, '')
     const charCount = cleanText.replace(/\s/g, '').length
     const readingTime = Math.max(1, Math.ceil(charCount / 350))
     return { charCount, readingTime }
@@ -155,7 +155,7 @@ export default function EditorialEditorV7() {
         const isSubtitleBlock = remainingText.includes('[SUB]')
         const heightCompensation = isSubtitleBlock ? 1.5 : 0 
 
-        const cleanForMath = remainingText.replace(/\[\/?(SUB|HL)\]/g, '')
+        const cleanForMath = remainingText.replace(/\[\/?(SUB|HL|CENTER|RIGHT)\]/g, '')
         const visualLen = getVisualLength(cleanForMath)
         const neededLines = Math.max(1, Math.ceil(visualLen / charsPerLine))
         const availableLines = maxLinesPerPage - currentLines
@@ -179,6 +179,10 @@ export default function EditorialEditorV7() {
             if (remainingText.startsWith('[/SUB]', realIdx)) { realIdx += 6; continue }
             if (remainingText.startsWith('[HL]', realIdx)) { realIdx += 4; continue }
             if (remainingText.startsWith('[/HL]', realIdx)) { realIdx += 5; continue }
+            if (remainingText.startsWith('[CENTER]', realIdx)) { realIdx += 8; continue }
+            if (remainingText.startsWith('[/CENTER]', realIdx)) { realIdx += 9; continue }
+            if (remainingText.startsWith('[RIGHT]', realIdx)) { realIdx += 7; continue }
+            if (remainingText.startsWith('[/RIGHT]', realIdx)) { realIdx += 8; continue }
 
             const char = remainingText[realIdx]
             const charLen = char.charCodeAt(0) > 255 ? 1 : 0.55
@@ -208,6 +212,20 @@ export default function EditorialEditorV7() {
             if (lastOpen > 0) cutIdx = lastOpen
           }
 
+          const openCenter = (sub.match(/\[CENTER\]/g) || []).length
+          const closeCenter = (sub.match(/\[\/CENTER\]/g) || []).length
+          if (openCenter > closeCenter) {
+            const lastOpen = sub.lastIndexOf('[CENTER]')
+            if (lastOpen > 0) cutIdx = lastOpen
+          }
+
+          const openRight = (sub.match(/\[RIGHT\]/g) || []).length
+          const closeRight = (sub.match(/\[\/RIGHT\]/g) || []).length
+          if (openRight > closeRight) {
+            const lastOpen = sub.lastIndexOf('[RIGHT]')
+            if (lastOpen > 0) cutIdx = lastOpen
+          }
+
           const partToFit = remainingText.slice(0, cutIdx)
           if (partToFit.trim()) {
             currentBlocks.push({ type: 'text', content: partToFit })
@@ -224,7 +242,7 @@ export default function EditorialEditorV7() {
   }, [editorialText, edRatio, edSizeLabel, activeImages, mounted])
 
   const renderRichText = (content: string) => {
-    const parts = content.split(/(\[SUB\].*?\[\/SUB\]|\[HL\].*?\[\/HL\])/g)
+    const parts = content.split(/(\[SUB\].*?\[\/SUB\]|\[HL\].*?\[\/HL\]|\[CENTER\].*?\[\/CENTER\]|\[RIGHT\].*?\[\/RIGHT\])/g)
     
     return parts.map((part, i) => {
       if (part.startsWith('[SUB]') && part.endsWith('[/SUB]')) {
@@ -262,6 +280,22 @@ export default function EditorialEditorV7() {
         )
       }
 
+      if (part.startsWith('[CENTER]') && part.endsWith('[/CENTER]')) {
+        return (
+          <div key={i} data-editor-format="center" className="block text-center">
+            {part.slice(8, -9)}
+          </div>
+        )
+      }
+
+      if (part.startsWith('[RIGHT]') && part.endsWith('[/RIGHT]')) {
+        return (
+          <div key={i} data-editor-format="right" className="block text-right">
+            {part.slice(7, -8)}
+          </div>
+        )
+      }
+
       return <span key={i}>{part}</span>
     })
   }
@@ -285,10 +319,10 @@ export default function EditorialEditorV7() {
     }
   }
 
-  const applyFormat = (type: 'sub' | 'hl') => {
+  const applyFormat = (type: 'sub' | 'hl' | 'center' | 'right') => {
     if (tooltip.text) {
-      const safeText = tooltip.text.replace(/\[\/?(SUB|HL)\]/g, '')
-      const tag = type === 'sub' ? 'SUB' : 'HL'
+      const safeText = tooltip.text.replace(/\[\/?(SUB|HL|CENTER|RIGHT)\]/g, '')
+      const tag = { sub: 'SUB', hl: 'HL', center: 'CENTER', right: 'RIGHT' }[type]
       
       setEditorialText((prev) => prev.replace(tooltip.text, `[${tag}]${safeText}[/${tag}]`))
       setTooltip({ show: false, text: '', x: 0, y: 0 })
@@ -354,6 +388,8 @@ export default function EditorialEditorV7() {
       const format = htmlElement.dataset.editorFormat
       if (format === 'sub') return `[SUB]${content}[/SUB]`
       if (format === 'hl') return `[HL]${content}[/HL]`
+      if (format === 'center') return `[CENTER]${content}[/CENTER]`
+      if (format === 'right') return `[RIGHT]${content}[/RIGHT]`
 
       // Browsers create divs when Enter is pressed in a contentEditable area.
       return htmlElement.tagName === 'DIV' ? `${content}\n` : content
@@ -364,7 +400,7 @@ export default function EditorialEditorV7() {
 
   const updateEditorialBlock = (originalContent: string, element: HTMLElement) => {
     const normalizedContent = serializeEditableContent(element)
-    const originalVisibleContent = originalContent.replace(/\[\/?(SUB|HL)\]/g, '')
+    const originalVisibleContent = originalContent.replace(/\[\/?(SUB|HL|CENTER|RIGHT)\]/g, '')
 
     if (originalContent === ' ') {
       if (normalizedContent === ' ') return
@@ -470,6 +506,19 @@ export default function EditorialEditorV7() {
             className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5"
           >
             <span className="text-[14px]">🖍️</span> 重点划线
+          </button>
+          <div className="w-[1px] h-4 bg-gray-200 mx-1"></div>
+          <button
+            onClick={() => applyFormat('center')}
+            className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5"
+          >
+            <span className="text-[14px]">≡</span> 居中
+          </button>
+          <button
+            onClick={() => applyFormat('right')}
+            className="px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1.5"
+          >
+            <span className="text-[14px]">≡</span> 居右
           </button>
         </div>
       )}
